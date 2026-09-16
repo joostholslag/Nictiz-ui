@@ -34,7 +34,7 @@ on:
 env:
   REGISTRY: ghcr.io
   # GHCR namespace (must be lowercase); matches the pins in charts/nictiz-ui.
-  IMAGE_ORG: freshehrteam
+  IMAGE_ORG: joostholslag
 
 jobs:
   # Tests gate the image. The build itself runs `tsc` (so type errors already
