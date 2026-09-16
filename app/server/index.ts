@@ -614,6 +614,7 @@ app.get('/api/admin/access-check', async (req, res) => {
     const upstream = await fetch(url, {
       headers: { Authorization: `Bearer ${userToken}`, Accept: 'application/json' },
     });
+
     const detail = (await upstream.text()).slice(0, 500);
     res.json({
       endpoint,

@@ -101,7 +101,6 @@ export class EpsSettings extends LitElement {
         <div class="muted" style="margin-top:6px; font-size:12px">${c.detail}</div>
       `;
     }
-
     // Least privilege reads as "good": blocked is the secure default this
     // stack is built around, granted is a deviation worth a second look.
     const kind = c.blocked ? 'up' : c.granted ? 'down' : 'demo';
