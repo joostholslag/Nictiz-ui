@@ -103,6 +103,19 @@ const FIXTURES_DIR = process.env.FIXTURES_DIR ?? resolve(here, '../../fixtures')
 const REQUIRE_AUTH = /^(1|true|yes)$/i.test(process.env.REQUIRE_AUTH ?? '');
 
 /**
+ * An env var, falling back when unset OR blank.
+ *
+ * Plain `??` only catches `undefined` — an env var explicitly set to `""`
+ * (a stray blank line in a `.env` file, a shell export left empty) sails
+ * straight through it and silently configures an empty header name, which
+ * then matches nothing. Same "blank counts as absent" rule `callerIdentity`
+ * already applies to the header VALUES, applied here to the header NAMES.
+ */
+function envOrDefault(value: string | undefined, fallback: string): string {
+  return value?.trim() || fallback;
+}
+
+/**
  * Header naming the authenticated user, set by the proxy.
  *
  * oauth2-proxy answers the ingress's auth-url subrequest with
@@ -111,8 +124,8 @@ const REQUIRE_AUTH = /^(1|true|yes)$/i.test(process.env.REQUIRE_AUTH ?? '');
  * auth-response-headers. Most OIDC forward-auth proxies speak the same
  * convention, which is why the names are configurable rather than hardcoded.
  */
-const AUTH_USER_HEADER = (process.env.AUTH_USER_HEADER ?? 'x-auth-request-user').toLowerCase();
-const AUTH_EMAIL_HEADER = (process.env.AUTH_EMAIL_HEADER ?? 'x-auth-request-email').toLowerCase();
+const AUTH_USER_HEADER = envOrDefault(process.env.AUTH_USER_HEADER, 'x-auth-request-user').toLowerCase();
+const AUTH_EMAIL_HEADER = envOrDefault(process.env.AUTH_EMAIL_HEADER, 'x-auth-request-email').toLowerCase();
 
 /**
  * Header carrying the logged-in user's OWN access token, set by the proxy.
@@ -133,8 +146,9 @@ const AUTH_EMAIL_HEADER = (process.env.AUTH_EMAIL_HEADER ?? 'x-auth-request-emai
  * diagnostic route where impersonating the caller instead is the entire
  * point.
  */
-const AUTH_ACCESS_TOKEN_HEADER = (
-  process.env.AUTH_ACCESS_TOKEN_HEADER ?? 'x-auth-request-access-token'
+const AUTH_ACCESS_TOKEN_HEADER = envOrDefault(
+  process.env.AUTH_ACCESS_TOKEN_HEADER,
+  'x-auth-request-access-token',
 ).toLowerCase();
 
 /**
