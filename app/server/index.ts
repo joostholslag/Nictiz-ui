@@ -43,6 +43,18 @@ dotenv.config({ path: resolve(here, '../../.env') });
 
 const EHRBASE_BASE =
   process.env.EHRBASE_BASE ?? 'http://localhost:8082/ehrbase/rest/openehr/v1';
+/**
+ * EHRbase's Admin API root — a sibling of the openEHR REST API, not a path
+ * under it (`.../rest/admin`, not `.../rest/openehr/v1/admin`). Derived from
+ * EHRBASE_BASE rather than given its own env var, so the two can never point
+ * at different EHRbase instances by accident of a stale override. Falls back
+ * to appending `/admin` when EHRBASE_BASE doesn't end in the expected
+ * `/openehr/v1` — better to probe a URL that 404s than to silently skip the
+ * derivation and probe the wrong server.
+ */
+const EHRBASE_ADMIN_BASE = /\/openehr\/v1\/?$/.test(EHRBASE_BASE)
+  ? EHRBASE_BASE.replace(/\/openehr\/v1\/?$/, '/admin')
+  : `${EHRBASE_BASE.replace(/\/$/, '')}/admin`;
 const FHIR_BASE = process.env.FHIR_BASE ?? 'http://localhost:8080/fhir';
 const OPENFHIR_BASE = process.env.OPENFHIR_BASE ?? 'http://localhost:8083';
 // Hades, the stack's FHIR terminology server (SNOMED CT / LOINC). Like
@@ -263,6 +275,11 @@ function ehrbaseUrl(path: string, query: Record<string, string> = {}): string {
   const url = new URL(`${EHRBASE_BASE.replace(/\/$/, '')}/${path.replace(/^\//, '')}`);
   for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
   return url.toString();
+}
+
+/** Single place where EHRbase Admin API URLs are built. */
+function ehrbaseAdminUrl(path: string): string {
+  return `${EHRBASE_ADMIN_BASE.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
 }
 
 function fhirUrl(path: string, query: Record<string, string> = {}): string {
@@ -514,6 +531,46 @@ app.get('/api/health', async (_req, res) => {
   health.openfhirBase = OPENFHIR_BASE;
   health.hadesBase = HADES_BASE;
   res.json(health);
+});
+
+/**
+ * Probes EHRbase's Admin API to check whether the BFF's service account
+ * currently holds admin privileges — a live read of the access-control
+ * boundary, not a description of how Keycloak roles are supposed to be
+ * mapped.
+ *
+ * `GET /admin/status` is the only admin route probed, and deliberately the
+ * only one that ever will be: it is a read-only heartbeat, while every other
+ * admin route deletes or overwrites CDR data. A button in the UI must never
+ * be able to do that just to report a status code.
+ *
+ * EHRbase gates the whole `/admin` tree behind a role distinct from the one
+ * this service account uses for everything else, so 401/403 here is the
+ * secure-by-default answer (see the comment on `deletePatient` in
+ * src/fhir/client.ts, which already relies on this account NOT having admin
+ * rights). A 2xx means it currently does, which is worth surfacing rather
+ * than assuming away.
+ */
+app.get('/api/admin/access-check', async (_req, res) => {
+  const endpoint = 'GET /rest/admin/status';
+  const url = ehrbaseAdminUrl('status');
+  try {
+    const upstream = await ehrbaseFetch(url);
+    const detail = (await upstream.text()).slice(0, 500);
+    res.json({
+      endpoint,
+      status: upstream.status,
+      granted: upstream.ok,
+      blocked: upstream.status === 401 || upstream.status === 403,
+      detail,
+    });
+  } catch (err) {
+    res.status(502).json({
+      error: 'Cannot reach EHRbase admin API',
+      detail: (err as Error).message,
+      hint: `Is the stack up? Expected EHRbase admin API at ${url}`,
+    });
+  }
 });
 
 /** Counts for the Dashboard and Settings tiles. */
