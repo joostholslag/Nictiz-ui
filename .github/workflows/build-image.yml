@@ -23,6 +23,10 @@ on:
       - "fixtures/**"
       - "Dockerfile"
       - ".dockerignore"
+      # A chart-only change builds an image too, on purpose: deploy-scaleway
+      # deploys the image built from the pushed commit, so every deployable
+      # change has to produce one (and pass the tests) before it can go live.
+      - "charts/nictiz-ui/**"
       - ".github/workflows/build-image.yml"
   pull_request:
     paths:

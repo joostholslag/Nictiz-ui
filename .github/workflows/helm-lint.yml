@@ -28,6 +28,9 @@ on:
 
 env:
   CHART_DIR: charts/nictiz-ui
+  # values-scaleway.yaml is complete except for the image tag, which
+  # deploy-scaleway.yml supplies per deploy; a bare lint/render needs a stand-in.
+  SCALEWAY_SET: "--set-string image.tag=0.0.0"
 
 jobs:
   # Render every values file. Catches template regressions that `helm lint`
@@ -45,6 +48,9 @@ jobs:
         run: |
           helm lint ${{ env.CHART_DIR }}
           helm lint ${{ env.CHART_DIR }} -f ${{ env.CHART_DIR }}/values-hetzner.yaml
+          # $SCALEWAY_SET is meant to word-split into separate flags.
+          # shellcheck disable=SC2086
+          helm lint ${{ env.CHART_DIR }} -f ${{ env.CHART_DIR }}/values-scaleway.yaml $SCALEWAY_SET
 
       # oidc.issuerUrl has no default on purpose (a wrong guess fails only at
       # login time), so the default render must supply one.
@@ -57,6 +63,13 @@ jobs:
         run: |
           helm template nictiz-ui ${{ env.CHART_DIR }} -n health-stack \
             -f ${{ env.CHART_DIR }}/values-hetzner.yaml > /dev/null
+
+      - name: Render (scaleway values)
+        run: |
+          # $SCALEWAY_SET is meant to word-split into separate flags.
+          # shellcheck disable=SC2086
+          helm template nictiz-ui ${{ env.CHART_DIR }} -n health-stack \
+            -f ${{ env.CHART_DIR }}/values-scaleway.yaml $SCALEWAY_SET > /dev/null
 
       # The auth wiring is the chart's only real logic. These greps pin the
       # invariants a refactor could quietly lose: the forward-auth annotations
@@ -92,6 +105,27 @@ jobs:
           fi
           if [ "$HOSTS" -lt 2 ]; then
             echo "::error::both Ingresses must publish nictiz-demo.freshehr.com (found $HOSTS rule hosts)"; exit 1
+          fi
+
+          # The Scaleway environment must carry the same forward-auth gate — it
+          # is a separate values file, so it could lose it independently.
+          # $SCALEWAY_SET is meant to word-split into separate flags.
+          # shellcheck disable=SC2086
+          SCW_RENDERED=$(helm template nictiz-ui ${{ env.CHART_DIR }} -n health-stack \
+            -f ${{ env.CHART_DIR }}/values-scaleway.yaml $SCALEWAY_SET)
+          for must in "nginx.ingress.kubernetes.io/auth-url" \
+                      "OAUTH2_PROXY_SET_XAUTHREQUEST" \
+                      "name: REQUIRE_AUTH"; do
+            if ! grep -q "$must" <<< "$SCW_RENDERED"; then
+              echo "::error::scaleway render is missing $must"; exit 1
+            fi
+          done
+          # The template's placeholder host means values-scaleway.yaml lost its own.
+          if grep -q "yourdomain.com" <<< "$SCW_RENDERED"; then
+            echo "::error::scaleway render still has the placeholder host — set ingress.host in values-scaleway.yaml"; exit 1
+          fi
+          if grep -qE 'image: "[^"]*:latest"' <<< "$SCW_RENDERED"; then
+            echo "::error::scaleway render pulls a :latest image — tags must be immutable"; exit 1
           fi
 
           # A blank issuer must fail the render, not ship a proxy that breaks
