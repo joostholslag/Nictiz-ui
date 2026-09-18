@@ -28,12 +28,9 @@ on:
 
 env:
   CHART_DIR: charts/nictiz-ui
-  # values-scaleway.yaml leaves these to deploy-scaleway.yml (GitHub variables),
-  # so a bare lint/render has to supply stand-ins.
-  SCALEWAY_SET: >-
-    --set-string image.tag=0.0.0
-    --set-string ingress.host=nictiz-demo.example.com
-    --set-string oidc.issuerUrl=https://stack.example.com/auth/realms/freshehr
+  # values-scaleway.yaml is complete except for the image tag, which
+  # deploy-scaleway.yml supplies per deploy; a bare lint/render needs a stand-in.
+  SCALEWAY_SET: "--set-string image.tag=0.0.0"
 
 jobs:
   # Render every values file. Catches template regressions that `helm lint`
@@ -123,6 +120,10 @@ jobs:
               echo "::error::scaleway render is missing $must"; exit 1
             fi
           done
+          # The template's placeholder host means values-scaleway.yaml lost its own.
+          if grep -q "yourdomain.com" <<< "$SCW_RENDERED"; then
+            echo "::error::scaleway render still has the placeholder host — set ingress.host in values-scaleway.yaml"; exit 1
+          fi
           if grep -qE 'image: "[^"]*:latest"' <<< "$SCW_RENDERED"; then
             echo "::error::scaleway render pulls a :latest image — tags must be immutable"; exit 1
           fi

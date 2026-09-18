@@ -38,17 +38,13 @@
 #           `terraform apply` fetched in the stack repo
 #           (terraform/envs/scaleway/kubeconfig). Same value as that repo's
 #           secret of the same name. It is a cluster-admin credential.
-#   Variables (environment or repository level)
-#     STACK_DOMAIN     the stack's domain — the stack repo's TF_DOMAIN. Keycloak's
-#                      public issuer is derived from it:
-#                      https://<STACK_DOMAIN>/auth/realms/freshehr
-#     NICTIZ_UI_HOST   this app's own public host, e.g. nictiz-demo.<domain>. A
-#                      DNS record must point it at the Scaleway load balancer
-#                      (a separate host on purpose: one oauth2-proxy per flow).
 # Repository variable (must be repository level — a job's `if` is evaluated
 # before its environment is attached):
 #   DEPLOY_BRANCH   which branch auto-deploys, e.g. main. Unset = never
 #                   auto-deploys (fails closed). workflow_dispatch always runs.
+#
+# The app's host and the Keycloak issuer are NOT settings: they are fixed facts of
+# this environment and live in charts/nictiz-ui/values-scaleway.yaml.
 name: deploy-scaleway
 
 on:
@@ -90,9 +86,7 @@ jobs:
        github.event.workflow_run.head_branch == vars.DEPLOY_BRANCH)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment:
-      name: scaleway
-      url: https://${{ vars.NICTIZ_UI_HOST }}
+    environment: scaleway
     steps:
       # Values that could be attacker-influenced (dispatch input) reach the shell
       # only through env, never interpolated into the script text.
@@ -133,17 +127,11 @@ jobs:
       - name: Check configuration
         env:
           SCALEWAY_KUBECONFIG: ${{ secrets.SCALEWAY_KUBECONFIG }}
-          STACK_DOMAIN: ${{ vars.STACK_DOMAIN }}
-          NICTIZ_UI_HOST: ${{ vars.NICTIZ_UI_HOST }}
         run: |
-          missing=0
-          for name in SCALEWAY_KUBECONFIG STACK_DOMAIN NICTIZ_UI_HOST; do
-            if [ -z "${!name}" ]; then
-              echo "::error::$name is not set on the 'scaleway' environment (see the header of deploy-scaleway.yml)"
-              missing=1
-            fi
-          done
-          exit "$missing"
+          if [ -z "$SCALEWAY_KUBECONFIG" ]; then
+            echo "::error::SCALEWAY_KUBECONFIG is not set on the 'scaleway' environment (see the header of deploy-scaleway.yml)"
+            exit 1
+          fi
 
       # Reads the repository from the values file so the image checked here and
       # the image deployed below cannot name different registries.
@@ -196,15 +184,11 @@ jobs:
       - name: Deploy
         env:
           IMAGE_TAG: ${{ steps.target.outputs.tag }}
-          NICTIZ_UI_HOST: ${{ vars.NICTIZ_UI_HOST }}
-          STACK_DOMAIN: ${{ vars.STACK_DOMAIN }}
         run: |
           set -euo pipefail
           values=(
             -f "$CHART_DIR/values-scaleway.yaml"
             --set-string "image.tag=$IMAGE_TAG"
-            --set-string "ingress.host=$NICTIZ_UI_HOST"
-            --set-string "oidc.issuerUrl=https://$STACK_DOMAIN/auth/realms/freshehr"
           )
 
           helm lint "$CHART_DIR" "${values[@]}"
@@ -219,10 +203,13 @@ jobs:
       # README "Verify": prove the NEW tag is what runs (a correct chart with a
       # stale image looks green everywhere else) and that the edge gate answers.
       - name: Verify
-        env:
-          NICTIZ_UI_HOST: ${{ vars.NICTIZ_UI_HOST }}
         run: |
           set -euo pipefail
+          NICTIZ_UI_HOST=$(awk '/^ingress:/{f=1; next} f && /^[^ #]/{f=0} f && $1=="host:"{print $2; exit}' "$CHART_DIR/values-scaleway.yaml" | tr -d '"')
+          if [ -z "$NICTIZ_UI_HOST" ]; then
+            echo "::error::ingress.host not found in $CHART_DIR/values-scaleway.yaml"
+            exit 1
+          fi
           kubectl -n "$NAMESPACE" rollout status "deploy/$RELEASE" --timeout=120s
 
           running=$(kubectl -n "$NAMESPACE" get "deploy/$RELEASE" \

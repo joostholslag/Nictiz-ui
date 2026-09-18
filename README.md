@@ -360,18 +360,22 @@ cluster (phase 3 of the stack repo's `envs/scaleway/README.md`) — the chart is
 namespace-coupled to it, exactly as on Hetzner. This pipeline does not provision
 anything.
 
-**One-time setup** — GitHub → Settings → Environments → `scaleway`:
+**One-time setup.** Two GitHub settings, nothing else:
 
-| Kind | Name | Value |
-|---|---|---|
-| Secret | `SCALEWAY_KUBECONFIG` | The kubeconfig your local `terraform apply` fetched in the stack repo (`terraform/envs/scaleway/kubeconfig`) — the same value as that repo's secret. **Cluster-admin.** |
-| Variable | `STACK_DOMAIN` | The stack's domain (its `TF_DOMAIN`); the Keycloak issuer is derived as `https://<domain>/auth/realms/freshehr` |
-| Variable | `NICTIZ_UI_HOST` | This app's own host — needs a DNS record pointing at the Scaleway load balancer |
-| Repository variable | `DEPLOY_BRANCH` | Branch that auto-deploys, e.g. `main`. Unset = never (fails closed) |
+| Kind | Where | Name | Value |
+|---|---|---|---|
+| Secret | Environment `scaleway` | `SCALEWAY_KUBECONFIG` | The kubeconfig your local `terraform apply` fetched in the stack repo — the same value as that repo's secret. **Cluster-admin.** |
+| Variable | Repository | `DEPLOY_BRANCH` | Branch that auto-deploys, e.g. `main`. Unset = never (fails closed) |
 
 `DEPLOY_BRANCH` has to be a *repository* variable: a job's `if` is evaluated
 before its environment exists. Add required reviewers to the environment if a
 person should approve each deploy.
+
+The app's host (`nictiz-demo.joostholslag.nl`, whose DNS record points at the
+Scaleway load balancer) and the Keycloak issuer
+(`https://health.joostholslag.nl/auth/realms/freshehr`) are not settings: they are
+fixed facts of this environment and live in
+[`values-scaleway.yaml`](charts/nictiz-ui/values-scaleway.yaml).
 
 The k3s API (`:6443`) must be reachable from GitHub's runners, which have no fixed
 IP. The stack's `scaleway-cluster` module allows that by default
