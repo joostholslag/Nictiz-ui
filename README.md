@@ -28,6 +28,8 @@ npm run seed                  # once — creates the demo patients
 
 Then open http://localhost:5173.
 
+<!-- branch-protection test: low-impact change, safe to ignore/close -->
+
 | Command | What it does |
 |---|---|
 | `npm run dev` | BFF and Vite together |
