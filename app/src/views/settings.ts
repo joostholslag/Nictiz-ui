@@ -235,13 +235,16 @@ export class EpsSettings extends LitElement {
             <p class="muted" style="margin-top:0">
               Probes EHRbase's <span class="mono">/admin</span> API as
               <strong>you</strong> — using the access token the ingress forwards for your
-              login, not the BFF's own shared credentials — via its root
-              (<span class="mono">GET /rest/admin</span>), where reaching it is itself the
-              permission check, so nothing under it is ever touched and the check can
-              never change anything. <strong>Blocked</strong> is the secure default;
-              <strong>granted</strong> means your account currently holds admin rights over
-              the CDR. Needs a deployed session with the proxy configured to forward the
-              access token — there is nothing to check locally.
+              login, not the BFF's own shared credentials — at its root
+              (<span class="mono">GET /rest/admin</span>), a path EHRbase serves nothing at,
+              chosen for exactly that reason: it cannot change anything, unlike every
+              real route under it. What it tests is the policy gate in front of EHRbase,
+              which decides on the path before EHRbase sees it.
+              <strong>Blocked</strong> (403 from the gate) is the secure default;
+              <strong>granted</strong> means you were admitted — including the
+              <span class="mono">404</span> EHRbase then answers with, since only an
+              admitted request ever reaches it. Needs a deployed session with the proxy
+              configured to forward the access token — there is nothing to check locally.
             </p>
             ${this.adminCheck
               ? this.renderAdminCheck()

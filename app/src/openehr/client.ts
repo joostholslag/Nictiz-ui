@@ -74,9 +74,14 @@ export interface AdminAccessCheck {
   /** The one admin route this ever probes, e.g. `GET /rest/admin`. */
   endpoint: string;
   status: number;
-  /** `status` was 2xx — the logged-in user currently holds admin rights. */
+  /**
+   * The request was admitted past the authorization gate — the logged-in
+   * user holds admin rights. Includes 404: EHRbase serves nothing at the
+   * Admin API's root, so an admitted caller collects its 404 rather than a
+   * 200. A refused one never reaches EHRbase at all.
+   */
   granted: boolean;
-  /** `status` was 401 or 403 — the secure-by-default answer. */
+  /** `status` was 401 or 403 — the gate refused, the secure-by-default answer. */
   blocked: boolean;
   /** No user access token reached the BFF, so nothing could be checked. */
   unavailable?: boolean;

@@ -22,6 +22,40 @@ export function ehrbaseAdminBaseFrom(ehrbaseBase: string): string {
     : `${ehrbaseBase.replace(/\/$/, '')}/admin`;
 }
 
+/** What a probe of the Admin API root says about the caller's access. */
+export interface AdminProbeVerdict {
+  /** The caller was admitted past the authorization gate. */
+  granted: boolean;
+  /** The gate refused the caller — the secure default. */
+  blocked: boolean;
+}
+
+/**
+ * Reads an Admin API probe's status code as an access verdict.
+ *
+ * The authorization decision is made on the `/rest/admin` path prefix by the
+ * policy layer in FRONT of EHRbase, before EHRbase sees the request at all.
+ * So the question this answers is "did the gate open", not "did a route
+ * answer" — which is why 404 counts as GRANTED, not as a failure: EHRbase
+ * mounts no handler at the Admin API's own root, so a caller who clears the
+ * gate gets EHRbase's own 404 rather than a 200. Being refused never gets
+ * that far; it comes back 403 from the policy layer.
+ *
+ * That the probed path has no handler is deliberate, not a workaround: a
+ * path nothing serves cannot mutate anything, which every real route under
+ * /rest/admin can (they delete or overwrite CDR data). The response body
+ * tells the two apart for a human — EHRbase answers JSON, the policy layer
+ * answers HTML.
+ *
+ * Anything else (5xx, 405, …) is deliberately NEITHER: the gate's answer is
+ * unclear, and guessing in either direction would be worse than saying so.
+ */
+export function classifyAdminProbe(status: number): AdminProbeVerdict {
+  const blocked = status === 401 || status === 403;
+  const granted = !blocked && ((status >= 200 && status < 300) || status === 404);
+  return { granted, blocked };
+}
+
 /**
  * An env var, falling back when unset OR blank.
  *

@@ -8,7 +8,40 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { ehrbaseAdminBaseFrom, envOrDefault } from '../../server/admin-access';
+import {
+  classifyAdminProbe,
+  ehrbaseAdminBaseFrom,
+  envOrDefault,
+} from '../../server/admin-access';
+
+describe('classifyAdminProbe', () => {
+  it('reads 401 and 403 as blocked — the gate refused', () => {
+    expect(classifyAdminProbe(403)).toEqual({ granted: false, blocked: true });
+    expect(classifyAdminProbe(401)).toEqual({ granted: false, blocked: true });
+  });
+
+  it('reads 404 as GRANTED, not as a failure', () => {
+    // The whole check rests on this. EHRbase serves nothing at the Admin API
+    // root, so its own 404 is what an ADMITTED caller collects — a refused
+    // one is stopped by the policy layer and never reaches EHRbase to be
+    // 404'd. Reading this as "not granted" would report an account WITH
+    // admin rights over the CDR as if it had none.
+    expect(classifyAdminProbe(404)).toEqual({ granted: true, blocked: false });
+  });
+
+  it('reads a 2xx as granted', () => {
+    expect(classifyAdminProbe(200)).toEqual({ granted: true, blocked: false });
+    expect(classifyAdminProbe(204)).toEqual({ granted: true, blocked: false });
+  });
+
+  it('commits to neither verdict when the gate did not clearly answer', () => {
+    // Claiming "granted" off a 500 would invent admin rights from a server
+    // fault; claiming "blocked" would invent a refusal nobody made.
+    for (const status of [500, 502, 503, 405, 429]) {
+      expect(classifyAdminProbe(status)).toEqual({ granted: false, blocked: false });
+    }
+  });
+});
 
 describe('ehrbaseAdminBaseFrom', () => {
   it('replaces the openEHR REST path with the admin sibling path', () => {

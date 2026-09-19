@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 
 import { callerIdentity, forwardedHeaderValue, type HeaderBag } from './identity';
-import { ehrbaseAdminBaseFrom, envOrDefault } from './admin-access';
+import { classifyAdminProbe, ehrbaseAdminBaseFrom, envOrDefault } from './admin-access';
 import { createTokenManager } from './oidc';
 import { identifyBundleWithPatient, linkBundleToComposition } from './bundle-link';
 import { adoptedEhrStatus, interceptorEhrId } from './ehr-link';
@@ -572,14 +572,24 @@ app.get('/api/health', async (_req, res) => {
  * around every other helper in this file that authenticates as
  * `nictiz-ui-svc`.
  *
- * The Admin API ROOT is the only admin route probed, and deliberately the
- * only one that ever will be: reaching it is itself the permission check
- * (200 when the caller holds the admin role, 403 "admin role is missing"
- * when not), while every sub-resource under it — ehr, composition,
- * contribution, directory, template — deletes or overwrites CDR data. A
- * button in the UI must never be able to do that just to report a status
- * code. There is no `/admin/status` sub-route to probe instead: EHRbase has
- * no such endpoint (its only `status` is Spring Actuator's, under
+ * The Admin API ROOT is the only path probed, and deliberately the only one
+ * that ever will be — precisely BECAUSE nothing is served there. EHRbase
+ * mounts no handler at it (verified against a deployed instance with
+ * ADMIN_API_ACTIVE on: it answers its own 404), while every sub-resource
+ * under it — ehr, composition, contribution, directory, template — deletes
+ * or overwrites CDR data. A path nothing serves cannot mutate anything, so
+ * this is a stronger guarantee than picking a real route and trusting the
+ * server to honour GET semantics. A button in the UI must never be able to
+ * damage the CDR just to report a status code.
+ *
+ * What makes that probe meaningful anyway is WHERE the authorization
+ * happens: the policy layer in front of EHRbase decides on the `/rest/admin`
+ * path prefix, before EHRbase sees the request. A refused caller never gets
+ * that far (403 from the policy layer); an admitted one reaches EHRbase and
+ * collects its 404. See `classifyAdminProbe`, which reads the codes.
+ *
+ * There is no `/admin/status` sub-route to probe instead: EHRbase has no
+ * such endpoint (its only `status` is Spring Actuator's, under
  * `/management`, which is a different API answering a different question).
  *
  * The user's own token has to reach this process for that to work at all —
@@ -617,8 +627,7 @@ app.get('/api/admin/access-check', async (req, res) => {
     res.json({
       endpoint,
       status: upstream.status,
-      granted: upstream.ok,
-      blocked: upstream.status === 401 || upstream.status === 403,
+      ...classifyAdminProbe(upstream.status),
       detail,
     });
   } catch (err) {
