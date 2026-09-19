@@ -739,6 +739,25 @@ eps-dashboard .dash-grid {
   margin-top: 16px;
 }
 
+eps-dashboard .template-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--eps-border);
+}
+
+eps-dashboard .template-row:last-child {
+  margin-bottom: 0;
+  border-bottom: 0;
+}
+
+eps-dashboard .template-row .pill {
+  flex: 0 0 100px;
+  justify-content: center;
+}
+
 /* ===========================================================================
    eps-save-pipeline — the modal shown while a composition is committed.
 
