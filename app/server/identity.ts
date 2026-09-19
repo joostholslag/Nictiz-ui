@@ -32,6 +32,19 @@ function firstValue(raw: string | string[] | undefined): string | undefined {
 }
 
 /**
+ * A single forwarded header's value, or null if it is absent or blank.
+ *
+ * Blank counts as absent: an empty forwarded header means the proxy did not
+ * actually supply a value, not that the value IS the empty string. Shared by
+ * `callerIdentity` (user/email) and anything else reading a single header the
+ * proxy forwards — the BFF's own access-token header included — so this rule
+ * cannot silently diverge between copies of the same logic.
+ */
+export function forwardedHeaderValue(headers: HeaderBag, name: string): string | null {
+  return firstValue(headers[name])?.trim() || null;
+}
+
+/**
  * Who the authenticating proxy says this request is from, or null if it did not
  * come through one.
  *
@@ -42,9 +55,7 @@ function firstValue(raw: string | string[] | undefined): string | undefined {
  * value.
  */
 export function callerIdentity(headers: HeaderBag, names: IdentityHeaders): string | null {
-  const user = firstValue(headers[names.user])?.trim();
-  if (user) return user;
-  const email = firstValue(headers[names.email])?.trim();
-  if (email) return email;
-  return null;
+  return (
+    forwardedHeaderValue(headers, names.user) ?? forwardedHeaderValue(headers, names.email)
+  );
 }

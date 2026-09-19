@@ -32,7 +32,9 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 
-import { callerIdentity, type HeaderBag } from './identity';
+import { callerIdentity, forwardedHeaderValue, type HeaderBag } from './identity';
+import { classifyAdminProbe, ehrbaseAdminBaseFrom, envOrDefault } from './admin-access';
+import { adminOps, describeAdminResult, resolveAdminOp } from './admin-ops';
 import { createTokenManager } from './oidc';
 import { identifyBundleWithPatient, linkBundleToComposition } from './bundle-link';
 import { adoptedEhrStatus, interceptorEhrId } from './ehr-link';
@@ -43,6 +45,16 @@ dotenv.config({ path: resolve(here, '../../.env') });
 
 const EHRBASE_BASE =
   process.env.EHRBASE_BASE ?? 'http://localhost:8082/ehrbase/rest/openehr/v1';
+/**
+ * EHRbase's Admin API root — a sibling of the openEHR REST API, not a path
+ * under it (`.../rest/admin`, not `.../rest/openehr/v1/admin`). Derived from
+ * EHRBASE_BASE rather than given its own env var, so the two can never point
+ * at different EHRbase instances by accident of a stale override. Falls back
+ * to appending `/admin` when EHRBASE_BASE doesn't end in the expected
+ * `/openehr/v1` — better to probe a URL that 404s than to silently skip the
+ * derivation and probe the wrong server.
+ */
+const EHRBASE_ADMIN_BASE = ehrbaseAdminBaseFrom(EHRBASE_BASE);
 const FHIR_BASE = process.env.FHIR_BASE ?? 'http://localhost:8080/fhir';
 const OPENFHIR_BASE = process.env.OPENFHIR_BASE ?? 'http://localhost:8083';
 // Hades, the stack's FHIR terminology server (SNOMED CT / LOINC). Like
@@ -99,8 +111,32 @@ const REQUIRE_AUTH = /^(1|true|yes)$/i.test(process.env.REQUIRE_AUTH ?? '');
  * auth-response-headers. Most OIDC forward-auth proxies speak the same
  * convention, which is why the names are configurable rather than hardcoded.
  */
-const AUTH_USER_HEADER = (process.env.AUTH_USER_HEADER ?? 'x-auth-request-user').toLowerCase();
-const AUTH_EMAIL_HEADER = (process.env.AUTH_EMAIL_HEADER ?? 'x-auth-request-email').toLowerCase();
+const AUTH_USER_HEADER = envOrDefault(process.env.AUTH_USER_HEADER, 'x-auth-request-user').toLowerCase();
+const AUTH_EMAIL_HEADER = envOrDefault(process.env.AUTH_EMAIL_HEADER, 'x-auth-request-email').toLowerCase();
+
+/**
+ * Header carrying the logged-in user's OWN access token, set by the proxy.
+ *
+ * Distinct from AUTH_USER_HEADER: that one is an identity CLAIM ("this
+ * request is from alice"), forwarded regardless. This header is a TOKEN that
+ * can actually authenticate as alice against a back end, and the chart's
+ * oauth2-proxy runs in auth_request mode (`static://202`, no real upstream) —
+ * it never proxies to the BFF itself, so `--pass-access-token` only adds the
+ * token to its OWN /oauth2/auth response, as `X-Auth-Request-Access-Token`.
+ * The Ingress then has to separately be told to copy that particular header
+ * from the auth subrequest onto the request it forwards to the BFF
+ * (auth-response-headers) — both are gated behind
+ * `auth.oauth2Proxy.passAccessToken` in the chart, OFF by default (see
+ * values.yaml for why). Used exactly once in this file, by the admin
+ * access-check below: everywhere else the BFF deliberately keeps acting as
+ * its own shared service account (see the file header), and this is the one
+ * diagnostic route where impersonating the caller instead is the entire
+ * point.
+ */
+const AUTH_ACCESS_TOKEN_HEADER = envOrDefault(
+  process.env.AUTH_ACCESS_TOKEN_HEADER,
+  'x-auth-request-access-token',
+).toLowerCase();
 
 /**
  * Display name for the UNAUTHENTICATED local-dev case only.
@@ -198,6 +234,17 @@ function identityOf(req: express.Request): string | null {
     user: AUTH_USER_HEADER,
     email: AUTH_EMAIL_HEADER,
   });
+}
+
+/**
+ * The logged-in user's own access token, when the proxy forwarded one.
+ *
+ * A blank header counts as absent, same reasoning as `callerIdentity`: an
+ * empty forwarded value means the proxy did not actually hand us a token,
+ * not that the user authenticates with the empty string.
+ */
+function accessTokenOf(req: express.Request): string | null {
+  return forwardedHeaderValue(req.headers as HeaderBag, AUTH_ACCESS_TOKEN_HEADER);
 }
 
 /**
@@ -514,6 +561,169 @@ app.get('/api/health', async (_req, res) => {
   health.openfhirBase = OPENFHIR_BASE;
   health.hadesBase = HADES_BASE;
   res.json(health);
+});
+
+/**
+ * Probes EHRbase's Admin API AS THE LOGGED-IN USER — a live read of what
+ * THEIR account is authorised to do, not what the BFF's own shared service
+ * account can do (already known: 403, see the comment on `deletePatient` in
+ * src/fhir/client.ts). Testing the fixed service account would answer the
+ * wrong question — this route exists so a Keycloak role change on a real
+ * person can be verified against EHRbase directly, which is also why it goes
+ * around every other helper in this file that authenticates as
+ * `nictiz-ui-svc`.
+ *
+ * The Admin API ROOT is the only path probed, and deliberately the only one
+ * that ever will be — precisely BECAUSE nothing is served there. EHRbase
+ * mounts no handler at it (verified against a deployed instance with
+ * ADMIN_API_ACTIVE on: it answers its own 404), while every sub-resource
+ * under it — ehr, composition, contribution, directory, template — deletes
+ * or overwrites CDR data. A path nothing serves cannot mutate anything, so
+ * this is a stronger guarantee than picking a real route and trusting the
+ * server to honour GET semantics. A button in the UI must never be able to
+ * damage the CDR just to report a status code.
+ *
+ * What makes that probe meaningful anyway is WHERE the authorization
+ * happens: the policy layer in front of EHRbase decides on the `/rest/admin`
+ * path prefix, before EHRbase sees the request. A refused caller never gets
+ * that far (403 from the policy layer); an admitted one reaches EHRbase and
+ * collects its 404. See `classifyAdminProbe`, which reads the codes.
+ *
+ * There is no `/admin/status` sub-route to probe instead: EHRbase has no
+ * such endpoint (its only `status` is Spring Actuator's, under
+ * `/management`, which is a different API answering a different question).
+ *
+ * The user's own token has to reach this process for that to work at all —
+ * see AUTH_ACCESS_TOKEN_HEADER. Without it there is nothing to check, and
+ * that is reported as its own outcome rather than silently substituting the
+ * service account's token, which would test the wrong identity and call the
+ * result reliable.
+ */
+app.get('/api/admin/access-check', async (req, res) => {
+  const endpoint = 'GET /rest/admin';
+  const url = EHRBASE_ADMIN_BASE;
+  const userToken = accessTokenOf(req);
+
+  if (!userToken) {
+    return res.json({
+      endpoint,
+      status: 0,
+      granted: false,
+      blocked: false,
+      unavailable: true,
+      detail:
+        'No user access token was forwarded with this request, so there is nothing to check ' +
+        `this user's own access with. Locally there is no user session at all. Deployed, the ` +
+        `chart's auth.oauth2Proxy.passAccessToken must be turned on (off by default) so the ` +
+        `ingress forwards one as ${AUTH_ACCESS_TOKEN_HEADER}.`,
+    });
+  }
+
+  try {
+    const upstream = await fetch(url, {
+      headers: { Authorization: `Bearer ${userToken}`, Accept: 'application/json' },
+    });
+
+    const detail = (await upstream.text()).slice(0, 500);
+    res.json({
+      endpoint,
+      status: upstream.status,
+      ...classifyAdminProbe(upstream.status),
+      detail,
+    });
+  } catch (err) {
+    res.status(502).json({
+      error: 'Cannot reach EHRbase admin API',
+      detail: (err as Error).message,
+      hint: `Is the stack up? Expected EHRbase admin API at ${url}`,
+    });
+  }
+});
+
+/** The admin operations the UI may offer, so it cannot invent its own. */
+app.get('/api/admin/operations', (_req, res) => {
+  res.json({
+    operations: adminOps().map(({ id, method, summary, params }) => ({
+      id,
+      method,
+      summary,
+      params,
+    })),
+  });
+});
+
+/**
+ * Performs one allowlisted admin operation AS THE LOGGED-IN USER.
+ *
+ * Every other upstream call in this file runs as the shared `nictiz-ui-svc`
+ * service account, and MUST NOT be reused here. That account's rights are not
+ * the caller's: routing an admin delete through `ehrbaseFetch`/`forward`
+ * would let anyone who can reach this port destroy CDR records regardless of
+ * their own Keycloak role, turning the BFF into a way around the policy layer
+ * rather than a client of it. The caller's own forwarded token is the only
+ * credential this route will use, which is why it is passed explicitly below
+ * instead of being picked up from a helper's ambient state — a missing token
+ * has to fail loudly, never fall back to something more privileged.
+ *
+ * The request body names an operation ID from the allowlist, never a path.
+ * A client that could name its own path could name `template/all`, or any
+ * route a later EHRbase adds; `resolveAdminOp` builds every path from a
+ * table in this repo and encodes the parameters.
+ *
+ * These deletes are physical and un-auditable in EHRbase — see admin-ops.ts.
+ * The confirmation that they were intended belongs in the UI; what this route
+ * guarantees is that they run as a real person with real admin rights.
+ */
+app.post('/api/admin/execute', async (req, res) => {
+  const userToken = accessTokenOf(req);
+  if (!userToken) {
+    return res.status(403).json({
+      error: 'No user access token',
+      detail:
+        'Admin operations run as the logged-in user, never as this service. No token was ' +
+        `forwarded with this request, so there is no identity to run as. Deployed, the chart's ` +
+        `auth.oauth2Proxy.passAccessToken must be on so the ingress forwards one as ` +
+        `${AUTH_ACCESS_TOKEN_HEADER}. Locally there is no user session at all.`,
+    });
+  }
+
+  const { operation, args } = (req.body ?? {}) as {
+    operation?: unknown;
+    args?: Record<string, unknown>;
+  };
+  if (typeof operation !== 'string') {
+    return res.status(400).json({ error: 'No operation named' });
+  }
+
+  const resolution = resolveAdminOp(operation, args ?? {});
+  if (!resolution.ok) {
+    return res.status(400).json({ error: resolution.error });
+  }
+
+  const { op, path } = resolution.resolved;
+  const url = `${EHRBASE_ADMIN_BASE.replace(/\/$/, '')}/${path}`;
+
+  try {
+    const upstream = await fetch(url, {
+      method: op.method,
+      headers: { Authorization: `Bearer ${userToken}`, Accept: 'application/json' },
+    });
+
+    res.json({
+      operation: op.id,
+      endpoint: `${op.method} /rest/admin/${path}`,
+      status: upstream.status,
+      ok: upstream.status >= 200 && upstream.status < 300,
+      message: describeAdminResult(upstream.status),
+      detail: (await upstream.text()).slice(0, 500),
+    });
+  } catch (err) {
+    res.status(502).json({
+      error: 'Cannot reach EHRbase admin API',
+      detail: (err as Error).message,
+      hint: `Is the stack up? Expected EHRbase admin API at ${url}`,
+    });
+  }
 });
 
 /** Counts for the Dashboard and Settings tiles. */

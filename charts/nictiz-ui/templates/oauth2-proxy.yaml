@@ -75,6 +75,17 @@ spec:
             # domain or registered post-logout redirect URI is needed.
             - name: OAUTH2_PROXY_BACKEND_LOGOUT_URL
               value: {{ printf "%s/protocol/openid-connect/logout?id_token_hint={id_token}" .Values.oidc.issuerUrl | quote }}
+            {{- if .Values.auth.oauth2Proxy.passAccessToken }}
+            # Adds the caller's own access token as X-Auth-Request-Access-Token
+            # on the /oauth2/auth response — SET_XAUTHREQUEST above is what
+            # turns this flag into a response header rather than a proxy-mode
+            # upstream header, since this proxy never actually proxies
+            # (UPSTREAMS is static://202). Reaching the BFF from there still
+            # needs the Ingress's auth-response-headers to name it explicitly
+            # — see ingress.yaml.
+            - name: OAUTH2_PROXY_PASS_ACCESS_TOKEN
+              value: "true"
+            {{- end }}
             {{- if .Values.auth.oauth2Proxy.skipJwtBearerTokens }}
             # Also accept a valid Bearer JWT in place of a session cookie
             # (curl/CI smoke tests). Service-account tokens carry the
