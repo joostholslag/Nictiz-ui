@@ -4,15 +4,7 @@
 
 import { LitElement, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import {
-  checkAdminAccess,
-  getStats,
-  listTemplates,
-  uploadTemplate,
-  type AdminAccessCheck,
-  type HealthStatus,
-  type Stats,
-} from '../openehr/client';
+import { getStats, listTemplates, uploadTemplate, type HealthStatus, type Stats } from '../openehr/client';
 
 @customElement('eps-settings')
 export class EpsSettings extends LitElement {
@@ -27,9 +19,6 @@ export class EpsSettings extends LitElement {
   @state() private message = '';
   @state() private messageKind: 'info' | 'error' | 'success' = 'info';
   @state() private busy = false;
-
-  @state() private adminCheck?: AdminAccessCheck;
-  @state() private adminChecking = false;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -70,55 +59,6 @@ export class EpsSettings extends LitElement {
       // Allow the same file to be re-selected after a failure.
       input.value = '';
     }
-  }
-
-  /**
-   * Runs on click, never on load. This fires a real request against
-   * EHRbase's admin API with production credentials — worth an explicit
-   * action, not something that happens silently every time Settings opens.
-   */
-  private async runAdminCheck(): Promise<void> {
-    this.adminChecking = true;
-    try {
-      this.adminCheck = await checkAdminAccess();
-    } catch (err) {
-      this.messageKind = 'error';
-      this.message = (err as Error).message;
-    } finally {
-      this.adminChecking = false;
-    }
-  }
-
-  private renderAdminCheck() {
-    const c = this.adminCheck;
-    if (!c) return nothing;
-
-    if (c.unavailable) {
-      return html`
-        <div class="template-row">
-          <span class="pill demo">no user token</span>
-        </div>
-        <div class="muted" style="margin-top:6px; font-size:12px">${c.detail}</div>
-      `;
-    }
-    // Least privilege reads as "good": blocked is the secure default this
-    // stack is built around, granted is a deviation worth a second look.
-    const kind = c.blocked ? 'up' : c.granted ? 'down' : 'demo';
-    const label = c.blocked
-      ? 'blocked'
-      : c.granted
-        ? 'granted'
-        : `unexpected (HTTP ${c.status})`;
-
-    return html`
-      <div class="template-row">
-        <span class="pill ${kind}">admin access ${label}</span>
-        <span class="mono muted">${c.endpoint} → HTTP ${c.status}</span>
-      </div>
-      ${c.detail
-        ? html`<div class="muted" style="margin-top:6px; font-size:12px">${c.detail}</div>`
-        : nothing}
-    `;
   }
 
   render() {
@@ -216,35 +156,6 @@ export class EpsSettings extends LitElement {
                 Operational templates are uploaded to EHRbase and become available immediately.
               </span>
             </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-head">
-            <h3>Admin API access</h3>
-            <button
-              class="btn"
-              @click=${this.runAdminCheck}
-              ?disabled=${this.adminChecking}
-              data-testid="admin-access-check"
-            >
-              ${this.adminChecking ? html`<span class="spinner"></span>` : nothing} Run check
-            </button>
-          </div>
-          <div class="card-body">
-            <p class="muted" style="margin-top:0">
-              Probes EHRbase's <span class="mono">/admin</span> API as
-              <strong>you</strong> — using the access token the ingress forwards for your
-              login, not the BFF's own shared credentials — via the one read-only admin
-              route (<span class="mono">GET /admin/status</span>) so the check itself can
-              never change anything. <strong>Blocked</strong> is the secure default;
-              <strong>granted</strong> means your account currently holds admin rights over
-              the CDR. Needs a deployed session with the proxy configured to forward the
-              access token — there is nothing to check locally.
-            </p>
-            ${this.adminCheck
-              ? this.renderAdminCheck()
-              : html`<div class="empty">Not checked yet.</div>`}
           </div>
         </div>
       </div>

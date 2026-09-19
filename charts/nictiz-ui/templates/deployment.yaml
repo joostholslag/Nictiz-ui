@@ -84,8 +84,6 @@ spec:
               value: {{ .Values.auth.userHeader | quote }}
             - name: AUTH_EMAIL_HEADER
               value: {{ .Values.auth.emailHeader | quote }}
-            - name: AUTH_ACCESS_TOKEN_HEADER
-              value: {{ .Values.auth.accessTokenHeader | quote }}
             - name: DEFAULT_USER_NAME
               value: {{ .Values.auth.defaultUserName | quote }}
 

@@ -70,31 +70,6 @@ export async function getStats(): Promise<Stats> {
   return json<Stats>(await fetch('/api/stats'), 'stats');
 }
 
-export interface AdminAccessCheck {
-  /** The one admin route this ever probes, e.g. `GET /rest/admin/status`. */
-  endpoint: string;
-  status: number;
-  /** `status` was 2xx — the logged-in user currently holds admin rights. */
-  granted: boolean;
-  /** `status` was 401 or 403 — the secure-by-default answer. */
-  blocked: boolean;
-  /** No user access token reached the BFF, so nothing could be checked. */
-  unavailable?: boolean;
-  detail: string;
-}
-
-/**
- * Probes whether the LOGGED-IN USER currently holds admin rights on EHRbase,
- * via the one read-only, side-effect-free route in its Admin API
- * (`GET /admin/status`) — called with that user's own forwarded access
- * token, not the BFF's shared service-account credentials. A live check of
- * the access-control boundary for a real person, so a Keycloak role change
- * can be verified here instead of taken on faith.
- */
-export async function checkAdminAccess(): Promise<AdminAccessCheck> {
-  return json<AdminAccessCheck>(await fetch('/api/admin/access-check'), 'admin access check');
-}
-
 export async function listTemplates(): Promise<string[]> {
   const body = await json<{ templates: string[] }>(await fetch('/api/templates'), 'template list');
   return body.templates ?? [];

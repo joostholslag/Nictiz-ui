@@ -1,6 +1,6 @@
 # Build & push the nictiz-ui container image to GHCR.
 #
-#   ghcr.io/joostholslag/nictiz-ui  = the SPA (built by Vite) + the BFF, in one image.
+#   ghcr.io/freshehrteam/nictiz-ui  = the SPA (built by Vite) + the BFF, in one image.
 #
 # The Helm chart in charts/nictiz-ui references it via `image.repository` /
 # `image.tag`. Mirrors the health-stack repo's build-images.yml, including its
@@ -9,7 +9,7 @@
 # No repo secrets needed: pushes authenticate with the workflow's own GITHUB_TOKEN
 # (the image job requests `packages: write`). ONE-TIME step after the first push:
 # GHCR creates the package private, so flip it to Public
-# (github.com/orgs/joostholslag/packages → nictiz-ui → Package settings → Danger
+# (github.com/orgs/freshehrteam/packages → nictiz-ui → Package settings → Danger
 # Zone → Change visibility). Until then every pull fails with "pull access denied"
 # even though the workflow is green.
 name: build-image
@@ -23,6 +23,10 @@ on:
       - "fixtures/**"
       - "Dockerfile"
       - ".dockerignore"
+      # A chart-only change builds an image too, on purpose: deploy-scaleway
+      # deploys the image built from the pushed commit, so every deployable
+      # change has to produce one (and pass the tests) before it can go live.
+      - "charts/nictiz-ui/**"
       - ".github/workflows/build-image.yml"
   pull_request:
     paths:

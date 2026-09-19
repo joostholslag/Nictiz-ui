@@ -43,18 +43,6 @@ dotenv.config({ path: resolve(here, '../../.env') });
 
 const EHRBASE_BASE =
   process.env.EHRBASE_BASE ?? 'http://localhost:8082/ehrbase/rest/openehr/v1';
-/**
- * EHRbase's Admin API root — a sibling of the openEHR REST API, not a path
- * under it (`.../rest/admin`, not `.../rest/openehr/v1/admin`). Derived from
- * EHRBASE_BASE rather than given its own env var, so the two can never point
- * at different EHRbase instances by accident of a stale override. Falls back
- * to appending `/admin` when EHRBASE_BASE doesn't end in the expected
- * `/openehr/v1` — better to probe a URL that 404s than to silently skip the
- * derivation and probe the wrong server.
- */
-const EHRBASE_ADMIN_BASE = /\/openehr\/v1\/?$/.test(EHRBASE_BASE)
-  ? EHRBASE_BASE.replace(/\/openehr\/v1\/?$/, '/admin')
-  : `${EHRBASE_BASE.replace(/\/$/, '')}/admin`;
 const FHIR_BASE = process.env.FHIR_BASE ?? 'http://localhost:8080/fhir';
 const OPENFHIR_BASE = process.env.OPENFHIR_BASE ?? 'http://localhost:8083';
 // Hades, the stack's FHIR terminology server (SNOMED CT / LOINC). Like
@@ -103,19 +91,6 @@ const FIXTURES_DIR = process.env.FIXTURES_DIR ?? resolve(here, '../../fixtures')
 const REQUIRE_AUTH = /^(1|true|yes)$/i.test(process.env.REQUIRE_AUTH ?? '');
 
 /**
- * An env var, falling back when unset OR blank.
- *
- * Plain `??` only catches `undefined` — an env var explicitly set to `""`
- * (a stray blank line in a `.env` file, a shell export left empty) sails
- * straight through it and silently configures an empty header name, which
- * then matches nothing. Same "blank counts as absent" rule `callerIdentity`
- * already applies to the header VALUES, applied here to the header NAMES.
- */
-function envOrDefault(value: string | undefined, fallback: string): string {
-  return value?.trim() || fallback;
-}
-
-/**
  * Header naming the authenticated user, set by the proxy.
  *
  * oauth2-proxy answers the ingress's auth-url subrequest with
@@ -124,32 +99,8 @@ function envOrDefault(value: string | undefined, fallback: string): string {
  * auth-response-headers. Most OIDC forward-auth proxies speak the same
  * convention, which is why the names are configurable rather than hardcoded.
  */
-const AUTH_USER_HEADER = envOrDefault(process.env.AUTH_USER_HEADER, 'x-auth-request-user').toLowerCase();
-const AUTH_EMAIL_HEADER = envOrDefault(process.env.AUTH_EMAIL_HEADER, 'x-auth-request-email').toLowerCase();
-
-/**
- * Header carrying the logged-in user's OWN access token, set by the proxy.
- *
- * Distinct from AUTH_USER_HEADER: that one is an identity CLAIM ("this
- * request is from alice"), forwarded regardless. This header is a TOKEN that
- * can actually authenticate as alice against a back end, and the chart's
- * oauth2-proxy runs in auth_request mode (`static://202`, no real upstream) —
- * it never proxies to the BFF itself, so `--pass-access-token` only adds the
- * token to its OWN /oauth2/auth response, as `X-Auth-Request-Access-Token`.
- * The Ingress then has to separately be told to copy that particular header
- * from the auth subrequest onto the request it forwards to the BFF
- * (auth-response-headers) — both are gated behind
- * `auth.oauth2Proxy.passAccessToken` in the chart, OFF by default (see
- * values.yaml for why). Used exactly once in this file, by the admin
- * access-check below: everywhere else the BFF deliberately keeps acting as
- * its own shared service account (see the file header), and this is the one
- * diagnostic route where impersonating the caller instead is the entire
- * point.
- */
-const AUTH_ACCESS_TOKEN_HEADER = envOrDefault(
-  process.env.AUTH_ACCESS_TOKEN_HEADER,
-  'x-auth-request-access-token',
-).toLowerCase();
+const AUTH_USER_HEADER = (process.env.AUTH_USER_HEADER ?? 'x-auth-request-user').toLowerCase();
+const AUTH_EMAIL_HEADER = (process.env.AUTH_EMAIL_HEADER ?? 'x-auth-request-email').toLowerCase();
 
 /**
  * Display name for the UNAUTHENTICATED local-dev case only.
@@ -250,19 +201,6 @@ function identityOf(req: express.Request): string | null {
 }
 
 /**
- * The logged-in user's own access token, when the proxy forwarded one.
- *
- * A blank header counts as absent, same reasoning as `callerIdentity`: an
- * empty forwarded value means the proxy did not actually hand us a token,
- * not that the user authenticates with the empty string.
- */
-function accessTokenOf(req: express.Request): string | null {
-  const raw = req.headers[AUTH_ACCESS_TOKEN_HEADER];
-  const value = (Array.isArray(raw) ? raw[0] : raw)?.trim();
-  return value || null;
-}
-
-/**
  * Enforces that an authenticating proxy is in front of us.
  *
  * When REQUIRE_AUTH is on, a request must arrive carrying the proxy's identity
@@ -325,11 +263,6 @@ function ehrbaseUrl(path: string, query: Record<string, string> = {}): string {
   const url = new URL(`${EHRBASE_BASE.replace(/\/$/, '')}/${path.replace(/^\//, '')}`);
   for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
   return url.toString();
-}
-
-/** Single place where EHRbase Admin API URLs are built. */
-function ehrbaseAdminUrl(path: string): string {
-  return `${EHRBASE_ADMIN_BASE.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
 }
 
 function fhirUrl(path: string, query: Record<string, string> = {}): string {
@@ -581,69 +514,6 @@ app.get('/api/health', async (_req, res) => {
   health.openfhirBase = OPENFHIR_BASE;
   health.hadesBase = HADES_BASE;
   res.json(health);
-});
-
-/**
- * Probes EHRbase's Admin API AS THE LOGGED-IN USER — a live read of what
- * THEIR account is authorised to do, not what the BFF's own shared service
- * account can do (already known: 403, see the comment on `deletePatient` in
- * src/fhir/client.ts). Testing the fixed service account would answer the
- * wrong question — this route exists so a Keycloak role change on a real
- * person can be verified against EHRbase directly, which is also why it goes
- * around every other helper in this file that authenticates as
- * `nictiz-ui-svc`.
- *
- * `GET /admin/status` is the only admin route probed, and deliberately the
- * only one that ever will be: it is a read-only heartbeat, while every other
- * admin route deletes or overwrites CDR data. A button in the UI must never
- * be able to do that just to report a status code.
- *
- * The user's own token has to reach this process for that to work at all —
- * see AUTH_ACCESS_TOKEN_HEADER. Without it there is nothing to check, and
- * that is reported as its own outcome rather than silently substituting the
- * service account's token, which would test the wrong identity and call the
- * result reliable.
- */
-app.get('/api/admin/access-check', async (req, res) => {
-  const endpoint = 'GET /rest/admin/status';
-  const url = ehrbaseAdminUrl('status');
-  const userToken = accessTokenOf(req);
-
-  if (!userToken) {
-    return res.json({
-      endpoint,
-      status: 0,
-      granted: false,
-      blocked: false,
-      unavailable: true,
-      detail:
-        'No user access token was forwarded with this request, so there is nothing to check ' +
-        `this user's own access with. Locally there is no user session at all. Deployed, the ` +
-        `chart's auth.oauth2Proxy.passAccessToken must be turned on (off by default) so the ` +
-        `ingress forwards one as ${AUTH_ACCESS_TOKEN_HEADER}.`,
-    });
-  }
-
-  try {
-    const upstream = await fetch(url, {
-      headers: { Authorization: `Bearer ${userToken}`, Accept: 'application/json' },
-    });
-
-    const detail = (await upstream.text()).slice(0, 500);
-    res.json({
-      endpoint,
-      status: upstream.status,
-      granted: upstream.ok,
-      blocked: upstream.status === 401 || upstream.status === 403,
-      detail,
-    });
-  } catch (err) {
-    res.status(502).json({
-      error: 'Cannot reach EHRbase admin API',
-      detail: (err as Error).message,
-      hint: `Is the stack up? Expected EHRbase admin API at ${url}`,
-    });
-  }
 });
 
 /** Counts for the Dashboard and Settings tiles. */
