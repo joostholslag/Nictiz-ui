@@ -60,6 +60,9 @@ auth:
   required: true
   oauth2Proxy:
     enabled: true
+    # Scaleway is the dev cluster this admin-access check is meant to be
+    # exercised on — see values.yaml for the tradeoff this opts into.
+    passAccessToken: true
   defaultUserName: Demo User
 
 # k3s enforces NetworkPolicy out of the box (kube-router). The default allowFrom
