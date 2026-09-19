@@ -311,11 +311,6 @@ function ehrbaseUrl(path: string, query: Record<string, string> = {}): string {
   return url.toString();
 }
 
-/** Single place where EHRbase Admin API URLs are built. */
-function ehrbaseAdminUrl(path: string): string {
-  return `${EHRBASE_ADMIN_BASE.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
-}
-
 function fhirUrl(path: string, query: Record<string, string> = {}): string {
   const url = new URL(`${FHIR_BASE.replace(/\/$/, '')}/${path.replace(/^\//, '')}`);
   for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
@@ -577,10 +572,15 @@ app.get('/api/health', async (_req, res) => {
  * around every other helper in this file that authenticates as
  * `nictiz-ui-svc`.
  *
- * `GET /admin/status` is the only admin route probed, and deliberately the
- * only one that ever will be: it is a read-only heartbeat, while every other
- * admin route deletes or overwrites CDR data. A button in the UI must never
- * be able to do that just to report a status code.
+ * The Admin API ROOT is the only admin route probed, and deliberately the
+ * only one that ever will be: reaching it is itself the permission check
+ * (200 when the caller holds the admin role, 403 "admin role is missing"
+ * when not), while every sub-resource under it — ehr, composition,
+ * contribution, directory, template — deletes or overwrites CDR data. A
+ * button in the UI must never be able to do that just to report a status
+ * code. There is no `/admin/status` sub-route to probe instead: EHRbase has
+ * no such endpoint (its only `status` is Spring Actuator's, under
+ * `/management`, which is a different API answering a different question).
  *
  * The user's own token has to reach this process for that to work at all —
  * see AUTH_ACCESS_TOKEN_HEADER. Without it there is nothing to check, and
@@ -589,8 +589,8 @@ app.get('/api/health', async (_req, res) => {
  * result reliable.
  */
 app.get('/api/admin/access-check', async (req, res) => {
-  const endpoint = 'GET /rest/admin/status';
-  const url = ehrbaseAdminUrl('status');
+  const endpoint = 'GET /rest/admin';
+  const url = EHRBASE_ADMIN_BASE;
   const userToken = accessTokenOf(req);
 
   if (!userToken) {

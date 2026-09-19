@@ -71,7 +71,7 @@ export async function getStats(): Promise<Stats> {
 }
 
 export interface AdminAccessCheck {
-  /** The one admin route this ever probes, e.g. `GET /rest/admin/status`. */
+  /** The one admin route this ever probes, e.g. `GET /rest/admin`. */
   endpoint: string;
   status: number;
   /** `status` was 2xx — the logged-in user currently holds admin rights. */
@@ -85,8 +85,8 @@ export interface AdminAccessCheck {
 
 /**
  * Probes whether the LOGGED-IN USER currently holds admin rights on EHRbase,
- * via the one read-only, side-effect-free route in its Admin API
- * (`GET /admin/status`) — called with that user's own forwarded access
+ * via the one read-only, side-effect-free route in its Admin API — its root
+ * (`GET /rest/admin`) — called with that user's own forwarded access
  * token, not the BFF's shared service-account credentials. A live check of
  * the access-control boundary for a real person, so a Keycloak role change
  * can be verified here instead of taken on faith.

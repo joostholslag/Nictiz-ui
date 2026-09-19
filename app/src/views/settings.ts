@@ -235,8 +235,9 @@ export class EpsSettings extends LitElement {
             <p class="muted" style="margin-top:0">
               Probes EHRbase's <span class="mono">/admin</span> API as
               <strong>you</strong> — using the access token the ingress forwards for your
-              login, not the BFF's own shared credentials — via the one read-only admin
-              route (<span class="mono">GET /admin/status</span>) so the check itself can
+              login, not the BFF's own shared credentials — via its root
+              (<span class="mono">GET /rest/admin</span>), where reaching it is itself the
+              permission check, so nothing under it is ever touched and the check can
               never change anything. <strong>Blocked</strong> is the secure default;
               <strong>granted</strong> means your account currently holds admin rights over
               the CDR. Needs a deployed session with the proxy configured to forward the
