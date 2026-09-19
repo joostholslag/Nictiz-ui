@@ -32,7 +32,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 
-import { callerIdentity, type HeaderBag } from './identity';
+import { callerIdentity, forwardedHeaderValue, type HeaderBag } from './identity';
+import { ehrbaseAdminBaseFrom, envOrDefault } from './admin-access';
 import { createTokenManager } from './oidc';
 import { identifyBundleWithPatient, linkBundleToComposition } from './bundle-link';
 import { adoptedEhrStatus, interceptorEhrId } from './ehr-link';
@@ -52,9 +53,7 @@ const EHRBASE_BASE =
  * `/openehr/v1` — better to probe a URL that 404s than to silently skip the
  * derivation and probe the wrong server.
  */
-const EHRBASE_ADMIN_BASE = /\/openehr\/v1\/?$/.test(EHRBASE_BASE)
-  ? EHRBASE_BASE.replace(/\/openehr\/v1\/?$/, '/admin')
-  : `${EHRBASE_BASE.replace(/\/$/, '')}/admin`;
+const EHRBASE_ADMIN_BASE = ehrbaseAdminBaseFrom(EHRBASE_BASE);
 const FHIR_BASE = process.env.FHIR_BASE ?? 'http://localhost:8080/fhir';
 const OPENFHIR_BASE = process.env.OPENFHIR_BASE ?? 'http://localhost:8083';
 // Hades, the stack's FHIR terminology server (SNOMED CT / LOINC). Like
@@ -101,19 +100,6 @@ const FIXTURES_DIR = process.env.FIXTURES_DIR ?? resolve(here, '../../fixtures')
  * fails closed (503/401) instead of silently publishing the whole CDR.
  */
 const REQUIRE_AUTH = /^(1|true|yes)$/i.test(process.env.REQUIRE_AUTH ?? '');
-
-/**
- * An env var, falling back when unset OR blank.
- *
- * Plain `??` only catches `undefined` — an env var explicitly set to `""`
- * (a stray blank line in a `.env` file, a shell export left empty) sails
- * straight through it and silently configures an empty header name, which
- * then matches nothing. Same "blank counts as absent" rule `callerIdentity`
- * already applies to the header VALUES, applied here to the header NAMES.
- */
-function envOrDefault(value: string | undefined, fallback: string): string {
-  return value?.trim() || fallback;
-}
 
 /**
  * Header naming the authenticated user, set by the proxy.
@@ -257,9 +243,7 @@ function identityOf(req: express.Request): string | null {
  * not that the user authenticates with the empty string.
  */
 function accessTokenOf(req: express.Request): string | null {
-  const raw = req.headers[AUTH_ACCESS_TOKEN_HEADER];
-  const value = (Array.isArray(raw) ? raw[0] : raw)?.trim();
-  return value || null;
+  return forwardedHeaderValue(req.headers as HeaderBag, AUTH_ACCESS_TOKEN_HEADER);
 }
 
 /**
