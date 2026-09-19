@@ -339,6 +339,75 @@ above on that release.
 
 ---
 
+## Deploying to Scaleway
+
+[`deploy-scaleway.yml`](.github/workflows/deploy-scaleway.yml) installs the chart
+on the health-stack's **Scaleway cluster** — the self-managed k3s one that the
+stack repo's `terraform/envs/scaleway` provisions, not a managed Kapsule cluster —
+with `helm upgrade --install` and
+[`values-scaleway.yaml`](charts/nictiz-ui/values-scaleway.yaml). It mirrors the
+stack repo's own `deploy-scaleway.yml`: same `scaleway` environment, same
+`SCALEWAY_KUBECONFIG` secret, same `DEPLOY_BRANCH` gate.
+
+```
+push to DEPLOY_BRANCH
+   └─ build-image: tests → image  ghcr.io/joostholslag/nictiz-ui:sha-<commit>
+        └─ deploy-scaleway: preflight → helm upgrade --atomic → verify
+```
+
+**What it needs to exist already.** The health-stack release running on that
+cluster (phase 3 of the stack repo's `envs/scaleway/README.md`) — the chart is
+namespace-coupled to it, exactly as on Hetzner. This pipeline does not provision
+anything.
+
+**One-time setup.** Two GitHub settings, nothing else:
+
+| Kind | Where | Name | Value |
+|---|---|---|---|
+| Secret | Environment `scaleway` | `SCALEWAY_KUBECONFIG` | The kubeconfig your local `terraform apply` fetched in the stack repo — the same value as that repo's secret. **Cluster-admin.** |
+| Variable | Repository | `DEPLOY_BRANCH` | Branch that auto-deploys, e.g. `main`. Unset = never (fails closed) |
+
+`DEPLOY_BRANCH` has to be a *repository* variable: a job's `if` is evaluated
+before its environment exists. Add required reviewers to the environment if a
+person should approve each deploy.
+
+The app's host (`nictiz-demo.joostholslag.nl`, whose DNS record points at the
+Scaleway load balancer) and the Keycloak issuer
+(`https://health.joostholslag.nl/auth/realms/freshehr`) are not settings: they are
+fixed facts of this environment and live in
+[`values-scaleway.yaml`](charts/nictiz-ui/values-scaleway.yaml).
+
+The k3s API (`:6443`) must be reachable from GitHub's runners, which have no fixed
+IP. The stack's `scaleway-cluster` module allows that by default
+(`k3s_api_cidrs = 0.0.0.0/0`; the port still requires a client certificate). If
+you narrow it, this pipeline needs a self-hosted runner instead.
+
+**Running it.**
+
+- **Automatically** when `build-image` succeeds for a push to `DEPLOY_BRANCH`. The
+  image is the one built from that commit (`sha-<7 hex>`). Chart-only changes
+  build an image too, so every deploy has passed the tests. PRs, tags and other
+  branches never deploy.
+- **By hand** — `gh workflow run deploy-scaleway.yml --ref <branch>` deploys the
+  image built from that ref's commit, or pass `-f image_tag=1.0.0` (or
+  `sha-<hex>`, no `v`, never `latest`) for a specific one. Deploying an older tag
+  is the rollback path. `build-image` only publishes images for `main` and `v*`
+  tags, so a feature-branch commit has none until it is merged.
+
+**What protects the cluster.** Only immutable tags are accepted (the chart pulls
+with `IfNotPresent`). The image must exist in GHCR before anything touches the
+cluster. A preflight checks API reachability, the `health-stack` namespace,
+`keycloak-secret` and the back-end Services, so a missing stack fails with a name
+instead of a ten-minute hook timeout. `--atomic` rolls the release back if the
+upgrade or the registration Job fails, and the final step checks that the
+Deployment runs the requested image and that an anonymous request is redirected
+to `/oauth2/start`. Deploys queue rather than cancel.
+
+`helm-lint.yml` also lints and renders `values-scaleway.yaml` on every PR, and
+asserts it keeps the forward-auth gate and pulls no `:latest` image.
+
+---
+
 ## Architecture
 
 Sequence and component diagrams for the save → FHIR translation → display flow
