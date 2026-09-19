@@ -66,6 +66,8 @@ export class EpsCompositions extends LitElement {
   /** Stored FHIR Bundles for this patient — HAPI-side, so independent of the EHR. */
   @state() private bundles: BundleSummary[] = [];
   @state() private bundlesError = '';
+  /** Feedback for the EHR ID copy affordance. */
+  @state() private ehrIdCopy: 'idle' | 'copied' | 'failed' = 'idle';
 
   updated(changed: Map<string, unknown>): void {
     if (changed.has('patientId') && this.patientId) void this.load();
@@ -223,13 +225,60 @@ export class EpsCompositions extends LitElement {
     return this.bundles.filter((b) => !roots.has(b.compositionUid?.split('::')[0] ?? ''));
   }
 
+  /**
+   * Copies the WHOLE EHR ID, not the shortened one on screen.
+   *
+   * The id is displayed truncated because it is noise for the clinical work
+   * this view is for, but it is also the addressing key for anything done to
+   * the EHR outside the UI — an admin API call, AQL run by hand, a support
+   * question — and truncating it everywhere left no way to obtain it at all.
+   *
+   * Clipboard access can be refused (an insecure context, a denied
+   * permission), and a copy button that silently does nothing is worse than
+   * no button: the fallback puts the full id on screen to select by hand, so
+   * the value is always reachable one way or the other.
+   */
+  private async copyEhrId(): Promise<void> {
+    if (!this.ehrId) return;
+    try {
+      await navigator.clipboard.writeText(this.ehrId);
+      this.ehrIdCopy = 'copied';
+      setTimeout(() => (this.ehrIdCopy = 'idle'), 2000);
+    } catch {
+      this.ehrIdCopy = 'failed';
+    }
+  }
+
+  private renderEhrId() {
+    const id = this.ehrId;
+    if (!id) return nothing;
+
+    const revealed = this.ehrIdCopy === 'failed';
+    return html` ·
+      <span class="mono muted" title=${id} data-testid="ehr-id">
+        EHR ${revealed ? id : `${id.slice(0, 8)}…`}
+      </span>
+      <button
+        class="copy-id"
+        @click=${this.copyEhrId}
+        title="Copy the full EHR ID"
+        data-testid="copy-ehr-id"
+      >
+        ${this.ehrIdCopy === 'copied'
+          ? 'copied'
+          : revealed
+            ? 'select it above'
+            : 'copy'}
+      </button>`;
+  }
+
   render() {
     return html`
       <div class="view-head">
         <h2>Compositions</h2>
         <p>
           ${this.patient ? `Records held for ${this.patient.name}` : 'Records held for this patient'}
-          ${this.ehrId ? html` · <span class="mono muted">EHR ${this.ehrId.slice(0, 8)}…</span>` : nothing}
+          ${this.renderEhrId()}
         </p>
       </div>
 

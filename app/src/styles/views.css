@@ -204,6 +204,24 @@ eps-compositions {
   display: block;
 }
 
+/* Inline text button, for the EHR ID copy affordance in the view header. A
+   full .btn would out-weigh the subtitle line it sits on. */
+eps-compositions .copy-id {
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--eps-teal-600);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+eps-compositions .copy-id:hover {
+  color: var(--eps-teal-800);
+}
+
 eps-compositions .panes {
   display: grid;
   grid-template-columns: 260px 1fr;
