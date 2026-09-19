@@ -727,6 +727,37 @@ eps-settings .upload-row {
   flex-wrap: wrap;
 }
 
+/* The admin console. Set apart from the rest of Settings on purpose: every
+   control in here is an irreversible, untraceable delete against the CDR, and
+   it must not read as just another row of buttons. */
+
+eps-settings .admin-op {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--eps-border);
+}
+
+eps-settings .admin-op:last-of-type {
+  border-bottom: 0;
+}
+
+eps-settings .admin-op .template-row {
+  border-bottom: 0;
+  padding-bottom: 4px;
+}
+
+eps-settings .admin-confirm {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #f3c9c5;
+  border-radius: var(--eps-radius-sm);
+  background: var(--eps-danger-bg);
+}
+
+eps-settings .admin-confirm p {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
 /* --- dashboard ------------------------------------------------------------ */
 
 eps-dashboard {

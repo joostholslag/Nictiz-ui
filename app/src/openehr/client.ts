@@ -100,6 +100,56 @@ export async function checkAdminAccess(): Promise<AdminAccessCheck> {
   return json<AdminAccessCheck>(await fetch('/api/admin/access-check'), 'admin access check');
 }
 
+export interface AdminOpParam {
+  name: string;
+  label: string;
+}
+
+/** One operation the BFF is willing to perform. The UI cannot invent others. */
+export interface AdminOp {
+  id: string;
+  method: string;
+  summary: string;
+  params: AdminOpParam[];
+}
+
+export interface AdminOpResult {
+  operation: string;
+  endpoint: string;
+  status: number;
+  ok: boolean;
+  /** How to read `status` — including 422, which is EHRbase protecting data. */
+  message: string;
+  detail: string;
+}
+
+export async function getAdminOps(): Promise<AdminOp[]> {
+  const { operations } = await json<{ operations: AdminOp[] }>(
+    await fetch('/api/admin/operations'),
+    'admin operations',
+  );
+  return operations;
+}
+
+/**
+ * Runs one admin operation, naming it by ID — the client never names a path.
+ *
+ * These deletes are physical: EHRbase removes the record and its whole
+ * version history, so nothing here can be undone or traced afterwards.
+ * Callers are expected to have confirmed with the operator first.
+ */
+export async function runAdminOp(
+  operation: string,
+  args: Record<string, string>,
+): Promise<AdminOpResult> {
+  const res = await fetch('/api/admin/execute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ operation, args }),
+  });
+  return json<AdminOpResult>(res, 'admin operation');
+}
+
 export async function listTemplates(): Promise<string[]> {
   const body = await json<{ templates: string[] }>(await fetch('/api/templates'), 'template list');
   return body.templates ?? [];

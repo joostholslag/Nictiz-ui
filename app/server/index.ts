@@ -34,6 +34,7 @@ import dotenv from 'dotenv';
 
 import { callerIdentity, forwardedHeaderValue, type HeaderBag } from './identity';
 import { classifyAdminProbe, ehrbaseAdminBaseFrom, envOrDefault } from './admin-access';
+import { adminOps, describeAdminResult, resolveAdminOp } from './admin-ops';
 import { createTokenManager } from './oidc';
 import { identifyBundleWithPatient, linkBundleToComposition } from './bundle-link';
 import { adoptedEhrStatus, interceptorEhrId } from './ehr-link';
@@ -629,6 +630,92 @@ app.get('/api/admin/access-check', async (req, res) => {
       status: upstream.status,
       ...classifyAdminProbe(upstream.status),
       detail,
+    });
+  } catch (err) {
+    res.status(502).json({
+      error: 'Cannot reach EHRbase admin API',
+      detail: (err as Error).message,
+      hint: `Is the stack up? Expected EHRbase admin API at ${url}`,
+    });
+  }
+});
+
+/** The admin operations the UI may offer, so it cannot invent its own. */
+app.get('/api/admin/operations', (_req, res) => {
+  res.json({
+    operations: adminOps().map(({ id, method, summary, params }) => ({
+      id,
+      method,
+      summary,
+      params,
+    })),
+  });
+});
+
+/**
+ * Performs one allowlisted admin operation AS THE LOGGED-IN USER.
+ *
+ * Every other upstream call in this file runs as the shared `nictiz-ui-svc`
+ * service account, and MUST NOT be reused here. That account's rights are not
+ * the caller's: routing an admin delete through `ehrbaseFetch`/`forward`
+ * would let anyone who can reach this port destroy CDR records regardless of
+ * their own Keycloak role, turning the BFF into a way around the policy layer
+ * rather than a client of it. The caller's own forwarded token is the only
+ * credential this route will use, which is why it is passed explicitly below
+ * instead of being picked up from a helper's ambient state — a missing token
+ * has to fail loudly, never fall back to something more privileged.
+ *
+ * The request body names an operation ID from the allowlist, never a path.
+ * A client that could name its own path could name `template/all`, or any
+ * route a later EHRbase adds; `resolveAdminOp` builds every path from a
+ * table in this repo and encodes the parameters.
+ *
+ * These deletes are physical and un-auditable in EHRbase — see admin-ops.ts.
+ * The confirmation that they were intended belongs in the UI; what this route
+ * guarantees is that they run as a real person with real admin rights.
+ */
+app.post('/api/admin/execute', async (req, res) => {
+  const userToken = accessTokenOf(req);
+  if (!userToken) {
+    return res.status(403).json({
+      error: 'No user access token',
+      detail:
+        'Admin operations run as the logged-in user, never as this service. No token was ' +
+        `forwarded with this request, so there is no identity to run as. Deployed, the chart's ` +
+        `auth.oauth2Proxy.passAccessToken must be on so the ingress forwards one as ` +
+        `${AUTH_ACCESS_TOKEN_HEADER}. Locally there is no user session at all.`,
+    });
+  }
+
+  const { operation, args } = (req.body ?? {}) as {
+    operation?: unknown;
+    args?: Record<string, unknown>;
+  };
+  if (typeof operation !== 'string') {
+    return res.status(400).json({ error: 'No operation named' });
+  }
+
+  const resolution = resolveAdminOp(operation, args ?? {});
+  if (!resolution.ok) {
+    return res.status(400).json({ error: resolution.error });
+  }
+
+  const { op, path } = resolution.resolved;
+  const url = `${EHRBASE_ADMIN_BASE.replace(/\/$/, '')}/${path}`;
+
+  try {
+    const upstream = await fetch(url, {
+      method: op.method,
+      headers: { Authorization: `Bearer ${userToken}`, Accept: 'application/json' },
+    });
+
+    res.json({
+      operation: op.id,
+      endpoint: `${op.method} /rest/admin/${path}`,
+      status: upstream.status,
+      ok: upstream.status >= 200 && upstream.status < 300,
+      message: describeAdminResult(upstream.status),
+      detail: (await upstream.text()).slice(0, 500),
     });
   } catch (err) {
     res.status(502).json({
