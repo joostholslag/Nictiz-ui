@@ -103,6 +103,14 @@ auth:
   userHeader: x-auth-request-user
   emailHeader: x-auth-request-email
 
+  # Header carrying the logged-in user's OWN access token — only meaningful
+  # when auth.oauth2Proxy.passAccessToken is also on (see below). Same
+  # mechanism as userHeader/emailHeader: oauth2-proxy emits
+  # X-Auth-Request-Access-Token on the /oauth2/auth response, and the
+  # Ingress's auth-response-headers annotation has to explicitly copy it onto
+  # the proxied request or it never reaches the BFF.
+  accessTokenHeader: x-auth-request-access-token
+
   # Display name written to `composer|name` when NO proxy identity arrived.
   # With oauth2-proxy in front that never happens — every request carries the
   # logged-in user, who becomes the composer. This remains only as the
@@ -154,6 +162,25 @@ auth:
     # Also accept a valid Bearer JWT instead of a session cookie, so
     # `make token`-style curl smoke tests work against this host too.
     skipJwtBearerTokens: true
+
+    # OFF BY DEFAULT — a deliberate trade-off, not an oversight.
+    #
+    # Turning this on makes oauth2-proxy include the logged-in user's own
+    # access token on its auth response (as accessTokenHeader above), and the
+    # Ingress copy it onto every request the BFF receives. That is what lets
+    # a route act AS the caller instead of as the BFF's shared service
+    # account — today used only by the Settings "Admin API access" check, so
+    # a real person's EHRbase admin rights can be verified live rather than
+    # assumed from Keycloak's role mapping.
+    #
+    # The cost: the user's live, short-lived (300 s) access token now
+    # transits and is held in memory by the BFF process on every request,
+    # widening what a compromised BFF pod could capture — not a new
+    # capability for that token (it already carries only the user's own
+    # rights), but a new place it passes through. Decide this per
+    # environment; it is NOT set in values-hetzner.yaml, so production stays
+    # off until turned on there deliberately.
+    passAccessToken: false
 
     resources:
       requests:

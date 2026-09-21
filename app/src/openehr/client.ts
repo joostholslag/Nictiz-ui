@@ -70,6 +70,86 @@ export async function getStats(): Promise<Stats> {
   return json<Stats>(await fetch('/api/stats'), 'stats');
 }
 
+export interface AdminAccessCheck {
+  /** The one admin route this ever probes, e.g. `GET /rest/admin`. */
+  endpoint: string;
+  status: number;
+  /**
+   * The request was admitted past the authorization gate — the logged-in
+   * user holds admin rights. Includes 404: EHRbase serves nothing at the
+   * Admin API's root, so an admitted caller collects its 404 rather than a
+   * 200. A refused one never reaches EHRbase at all.
+   */
+  granted: boolean;
+  /** `status` was 401 or 403 — the gate refused, the secure-by-default answer. */
+  blocked: boolean;
+  /** No user access token reached the BFF, so nothing could be checked. */
+  unavailable?: boolean;
+  detail: string;
+}
+
+/**
+ * Probes whether the LOGGED-IN USER currently holds admin rights on EHRbase,
+ * via the one read-only, side-effect-free route in its Admin API — its root
+ * (`GET /rest/admin`) — called with that user's own forwarded access
+ * token, not the BFF's shared service-account credentials. A live check of
+ * the access-control boundary for a real person, so a Keycloak role change
+ * can be verified here instead of taken on faith.
+ */
+export async function checkAdminAccess(): Promise<AdminAccessCheck> {
+  return json<AdminAccessCheck>(await fetch('/api/admin/access-check'), 'admin access check');
+}
+
+export interface AdminOpParam {
+  name: string;
+  label: string;
+}
+
+/** One operation the BFF is willing to perform. The UI cannot invent others. */
+export interface AdminOp {
+  id: string;
+  method: string;
+  summary: string;
+  params: AdminOpParam[];
+}
+
+export interface AdminOpResult {
+  operation: string;
+  endpoint: string;
+  status: number;
+  ok: boolean;
+  /** How to read `status` — including 422, which is EHRbase protecting data. */
+  message: string;
+  detail: string;
+}
+
+export async function getAdminOps(): Promise<AdminOp[]> {
+  const { operations } = await json<{ operations: AdminOp[] }>(
+    await fetch('/api/admin/operations'),
+    'admin operations',
+  );
+  return operations;
+}
+
+/**
+ * Runs one admin operation, naming it by ID — the client never names a path.
+ *
+ * These deletes are physical: EHRbase removes the record and its whole
+ * version history, so nothing here can be undone or traced afterwards.
+ * Callers are expected to have confirmed with the operator first.
+ */
+export async function runAdminOp(
+  operation: string,
+  args: Record<string, string>,
+): Promise<AdminOpResult> {
+  const res = await fetch('/api/admin/execute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ operation, args }),
+  });
+  return json<AdminOpResult>(res, 'admin operation');
+}
+
 export async function listTemplates(): Promise<string[]> {
   const body = await json<{ templates: string[] }>(await fetch('/api/templates'), 'template list');
   return body.templates ?? [];

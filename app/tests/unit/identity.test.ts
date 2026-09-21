@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { callerIdentity } from '../../server/identity';
+import { callerIdentity, forwardedHeaderValue } from '../../server/identity';
 
 const HEADERS = { user: 'x-auth-request-user', email: 'x-auth-request-email' };
 
@@ -79,5 +79,39 @@ describe('callerIdentity', () => {
     expect(callerIdentity({ 'x-forwarded-user': 'bob' }, custom)).toBe('bob');
     // The default name must NOT be consulted once it has been reconfigured.
     expect(callerIdentity({ 'x-auth-request-user': 'bob' }, custom)).toBeNull();
+  });
+});
+
+describe('forwardedHeaderValue', () => {
+  // The BFF's access-token check reads the caller's own bearer token through
+  // this same helper — getting "blank means absent" wrong here is the same
+  // class of bug as getting it wrong in callerIdentity, just on a token
+  // instead of an identity.
+
+  it('reads a header value', () => {
+    expect(forwardedHeaderValue({ 'x-auth-request-access-token': 'abc.def' }, 'x-auth-request-access-token')).toBe(
+      'abc.def',
+    );
+  });
+
+  it('returns null when the header is absent', () => {
+    expect(forwardedHeaderValue({}, 'x-auth-request-access-token')).toBeNull();
+  });
+
+  it('treats a blank or whitespace-only header as absent', () => {
+    expect(forwardedHeaderValue({ 'x-auth-request-access-token': '' }, 'x-auth-request-access-token')).toBeNull();
+    expect(forwardedHeaderValue({ 'x-auth-request-access-token': '   ' }, 'x-auth-request-access-token')).toBeNull();
+  });
+
+  it('trims surrounding whitespace', () => {
+    expect(forwardedHeaderValue({ 'x-auth-request-access-token': ' abc.def ' }, 'x-auth-request-access-token')).toBe(
+      'abc.def',
+    );
+  });
+
+  it('reads the first value when the header is repeated', () => {
+    expect(
+      forwardedHeaderValue({ 'x-auth-request-access-token': ['first', 'second'] }, 'x-auth-request-access-token'),
+    ).toBe('first');
   });
 });

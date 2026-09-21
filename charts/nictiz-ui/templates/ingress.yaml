@@ -36,7 +36,22 @@ metadata:
     # — losing auth-url would publish the CDR.
     nginx.ingress.kubernetes.io/auth-url: "http://{{ include "nictiz-ui.fullname" . }}-oauth2-proxy.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.auth.oauth2Proxy.service.port }}/oauth2/auth"
     nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$escaped_request_uri"
-    nginx.ingress.kubernetes.io/auth-response-headers: "X-Auth-Request-User, X-Auth-Request-Email, X-Auth-Request-Preferred-Username"
+    nginx.ingress.kubernetes.io/auth-response-headers: "X-Auth-Request-User, X-Auth-Request-Email, X-Auth-Request-Preferred-Username{{ if .Values.auth.oauth2Proxy.passAccessToken }}, X-Auth-Request-Access-Token{{ end }}"
+    {{- if .Values.auth.oauth2Proxy.passAccessToken }}
+    # passAccessToken adds the user's access token to oauth2-proxy's
+    # /oauth2/auth response — as its own header AND inside the session
+    # cookie (oauth2-proxy stores it there too, chunking the cookie across
+    # multiple Set-Cookie lines once it outgrows ~4KB). nginx buffers the
+    # WHOLE auth_request subrequest response — every Set-Cookie chunk plus
+    # X-Auth-Request-Access-Token — in one proxy_buffer_size-sized buffer
+    # before it can act on it. Past that buffer it fails the subrequest
+    # with "upstream sent too big header", which nginx turns into a 500 for
+    # every request on this Ingress, not just the ones that need the token:
+    # exactly what broke nictiz-demo.joostholslag.nl the first time this
+    # was turned on. Default proxy_buffer_size (4-8k) covers the identity
+    # headers alone but not a JWT-sized token on top of them.
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    {{- end }}
     {{- end }}
     {{- if .Values.ingress.tls.enabled }}
     cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.clusterIssuer | quote }}
