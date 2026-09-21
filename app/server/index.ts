@@ -768,12 +768,57 @@ app.get('/api/templates', async (_req, res) => {
  * committed fixture only covers the one. It returns 9 top-level children to the
  * fixture's 15 — the 6 extra are pure RM housekeeping and no clinical field
  * differs.
+ *
+ * Authenticated AS THE LOGGED-IN USER, not the shared `nictiz-ui-svc` service
+ * account — same reasoning and pattern as the admin routes above. The
+ * gateway's OPA policy in front of EHRbase authorizes this specific endpoint
+ * per clinician role (`dokter` vs `verpleegkundige`), read from the caller's
+ * own `realm_access.roles`; `nictiz-ui-svc` holds neither role, so there is no
+ * more-privileged fallback to reach for here, only the caller's own token.
+ * `forward()`/`ehrbaseFetch()`/`bearerFetch()`/`tokens.getToken()` are
+ * skipped entirely for this route in favour of a direct fetch with that token.
+ *
+ * When REQUIRE_AUTH is off (local dev — see the file header: no gate at all,
+ * no proxy in front to have forwarded a token) this falls back to the service
+ * account exactly as before, so local dev and the `@stack` e2e suite are
+ * unaffected. Deployed, REQUIRE_AUTH is always on (see deployment.yaml) and
+ * that fallback is refused: silently downgrading to a more-privileged shared
+ * credential there would defeat the policy this exists to satisfy.
  */
-app.get('/api/templates/:id/webtemplate', (req, res) =>
-  forward(res, ehrbaseUrl(`definition/template/adl1.4/${encodeURIComponent(req.params.id)}`), {
-    headers: { Accept: 'application/openehr.wt+json' },
-  }),
-);
+app.get('/api/templates/:id/webtemplate', async (req, res) => {
+  const url = ehrbaseUrl(`definition/template/adl1.4/${encodeURIComponent(req.params.id)}`);
+  const userToken = accessTokenOf(req);
+
+  if (!userToken) {
+    if (!REQUIRE_AUTH) {
+      return forward(res, url, { headers: { Accept: 'application/openehr.wt+json' } });
+    }
+    return res.status(401).json({
+      error: 'No user access token',
+      detail:
+        'The web template is authorized per clinician by the gateway, so it can only be ' +
+        `fetched with the logged-in user's own token — none was forwarded with this request. ` +
+        `The chart's auth.oauth2Proxy.passAccessToken must be on so the ingress forwards one ` +
+        `as ${AUTH_ACCESS_TOKEN_HEADER}.`,
+    });
+  }
+
+  try {
+    const upstream = await fetch(url, {
+      headers: { Authorization: `Bearer ${userToken}`, Accept: 'application/openehr.wt+json' },
+    });
+    const body = await upstream.text();
+    res.status(upstream.status);
+    res.type(upstream.headers.get('content-type') ?? 'application/json');
+    res.send(body);
+  } catch (err) {
+    res.status(502).json({
+      error: 'Cannot reach EHRbase',
+      detail: (err as Error).message,
+      hint: `Is the stack up? Expected EHRbase at ${EHRBASE_BASE}`,
+    });
+  }
+});
 
 /**
  * Uploads an OPT. The body is XML, kept verbatim — see express.text() above.
