@@ -41,6 +41,16 @@ jobs:
           [ -n "$BETTER_TOKEN" ] || { echo "::error::BETTER_ARTIFACTORY_RSO secret missing"; exit 1; }
           echo "api/npm/auth with user+token: HTTP $(curl -s -o /dev/null -w '%{http_code}' -u "$BETTER_USER:$BETTER_TOKEN" https://hub.better.care/artifactory/api/npm/auth)"
           echo "package metadata with user+token: HTTP $(curl -s -o /dev/null -w '%{http_code}' -u "$BETTER_USER:$BETTER_TOKEN" 'https://hub.better.care/npm/@better%2fform-renderer')"
+          echo "--- repositories visible to this account"
+          curl -s -u "$BETTER_USER:$BETTER_TOKEN" https://hub.better.care/artifactory/api/repositories | jq -r '.[] | "\(.type)\t\(.packageType)\t\(.key)\t\(.url)"' || true
+          echo "--- artifact search: form-renderer"
+          curl -s -u "$BETTER_USER:$BETTER_TOKEN" 'https://hub.better.care/artifactory/api/search/artifact?name=*form-renderer*' | jq -r '.results[]?.uri' | head -40 || true
+          echo "--- per npm repo: GET @better/form-renderer"
+          for repo in $(curl -s -u "$BETTER_USER:$BETTER_TOKEN" https://hub.better.care/artifactory/api/repositories | jq -r '.[] | select(.packageType=="npm") | .key'); do
+            printf '%-30s HTTP %s\n' "$repo" "$(curl -s -o /dev/null -w '%{http_code}' -u "$BETTER_USER:$BETTER_TOKEN" "https://hub.better.care/artifactory/api/npm/$repo/@better%2fform-renderer")"
+          done
+          echo "--- /npm/ alias: dist-tags of @better/form-renderer"
+          curl -s -u "$BETTER_USER:$BETTER_TOKEN" 'https://hub.better.care/npm/@better%2fform-renderer' | head -c 600; echo
           .github/scripts/better-npmrc.sh "$RUNNER_TEMP/npmrc"
           echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/npmrc" >> "$GITHUB_ENV"
           cp app/.npmrc ./.npmrc
