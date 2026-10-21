@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # ============================================================================
 # freshehr-nictiz-ui — SPA + BFF in one image, one process.
 #
@@ -20,11 +21,13 @@ WORKDIR /build
 
 # Dependencies first, as their own layer: package*.json changes far less often
 # than source, so an edit to src/ reuses the cached npm ci.
-COPY app/package.json app/package-lock.json ./
+COPY app/package.json app/package-lock.json app/.npmrc ./
 # `npm ci` (not install) — installs exactly the lockfile, which is the whole
 # point of committing one. Dev dependencies are needed here: tsc and vite are
-# both build-time tools.
-RUN npm ci
+# both build-time tools. @better/form-renderer comes from Better's private
+# registry: the credential is a BuildKit secret (see build-image.yml), never a
+# layer.
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc npm ci
 
 COPY app/tsconfig.json app/vite.config.ts ./
 COPY app/index.html ./
@@ -60,8 +63,8 @@ WORKDIR /app
 # NODE_ENV is deliberately NOT set before this step: npm treats NODE_ENV
 # =production as an implicit --omit=dev, which reintroduces exactly that
 # failure. It is set after the install instead.
-COPY app/package.json app/package-lock.json ./
-RUN npm ci && npm cache clean --force
+COPY app/package.json app/package-lock.json app/.npmrc ./
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc npm ci && npm cache clean --force
 
 ENV NODE_ENV=production
 

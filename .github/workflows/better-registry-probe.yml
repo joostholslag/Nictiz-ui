@@ -17,7 +17,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write # commits the updated app/package-lock.json back to the branch
 
 jobs:
   probe:
@@ -29,31 +29,22 @@ jobs:
         with:
           node-version: "22"
 
+      - uses: actions/checkout@v4
+
       - name: Configure registry
         env:
+          BETTER_USER: ${{ vars.BETTER_ARTIFACTORY_USER }}
           BETTER_TOKEN: ${{ secrets.BETTER_ARTIFACTORY_RSO }}
         run: |
           set -euo pipefail
-          [ -n "$BETTER_TOKEN" ] || { echo "::error::BETTER_ARTIFACTORY_RSO is empty"; exit 1; }
-          umask 077
-          {
-            echo "@better:registry=https://hub.better.care/npm/"
-            echo "//hub.better.care/:_authToken=$BETTER_TOKEN"
-            echo "//hub.better.care/npm/:_authToken=$BETTER_TOKEN"
-          } > ~/.npmrc
-          if npm view @better/form-renderer version >/dev/null 2>&1; then
-            echo "auth mode: _authToken"
-          else
-            echo "_authToken failed, trying _auth"
-            {
-              echo "@better:registry=https://hub.better.care/npm/"
-              echo "//hub.better.care/:_auth=$BETTER_TOKEN"
-              echo "//hub.better.care/npm/:_auth=$BETTER_TOKEN"
-              echo "always-auth=true"
-            } > ~/.npmrc
-            npm view @better/form-renderer version
-            echo "auth mode: _auth"
-          fi
+          [ -n "$BETTER_USER" ] || { echo "::error::BETTER_ARTIFACTORY_USER variable missing on the 'Better artifactory' environment"; exit 1; }
+          [ -n "$BETTER_TOKEN" ] || { echo "::error::BETTER_ARTIFACTORY_RSO secret missing"; exit 1; }
+          echo "api/npm/auth with user+token: HTTP $(curl -s -o /dev/null -w '%{http_code}' -u "$BETTER_USER:$BETTER_TOKEN" https://hub.better.care/artifactory/api/npm/auth)"
+          echo "package metadata with user+token: HTTP $(curl -s -o /dev/null -w '%{http_code}' -u "$BETTER_USER:$BETTER_TOKEN" 'https://hub.better.care/npm/@better%2fform-renderer')"
+          .github/scripts/better-npmrc.sh "$RUNNER_TEMP/npmrc"
+          echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/npmrc" >> "$GITHUB_ENV"
+          cp app/.npmrc ./.npmrc
+          npm view @better/form-renderer version
 
       - name: Versions
         run: |
@@ -67,9 +58,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir probe && cd probe
+          cp ../app/.npmrc .
           npm init -y >/dev/null
           npm install --ignore-scripts "@better/form-renderer@${VERSION:-latest}"
-          echo "installed: $(node -p "require('@better/form-renderer/package.json').version")"
+          ver=$(node -p "require('@better/form-renderer/package.json').version")
+          echo "installed: $ver"
+          echo "VER=$ver" >> "$GITHUB_ENV"
+          npm pack "@better/form-renderer@$ver" >/dev/null
           echo "--- files"; find node_modules/@better -maxdepth 3 -not -path '*/node_modules/*/node_modules/*' | sort | head -200
           echo "--- package.json"; cat node_modules/@better/form-renderer/package.json
           echo "--- README"; cat node_modules/@better/form-renderer/README* 2>/dev/null | head -400 || true
@@ -79,5 +74,24 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: form-renderer-package
-          path: probe/node_modules/@better/form-renderer
+          path: |
+            probe/node_modules/@better/form-renderer
+            probe/*.tgz
           retention-days: 3
+
+      # The lockfile can only be produced where the registry is reachable.
+      - name: Pin the dependency and commit the lockfile
+        if: github.event_name == 'push' || inputs.version != ''
+        run: |
+          set -euo pipefail
+          cd app
+          npm install --package-lock-only --save-exact "@better/form-renderer@$VER"
+          cd ..
+          if git diff --quiet -- app/package.json app/package-lock.json; then
+            echo "lockfile already pins $VER"; exit 0
+          fi
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add app/package.json app/package-lock.json
+          git commit -m "Pin @better/form-renderer $VER (lockfile written in CI, where the registry token lives)"
+          git push

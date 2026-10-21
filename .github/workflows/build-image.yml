@@ -47,6 +47,8 @@ jobs:
   # silently in production rather than loudly at build time.
   test:
     runs-on: ubuntu-latest
+    # Holds the Better registry credential for @better/form-renderer.
+    environment: Better artifactory
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -54,6 +56,13 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: app/package-lock.json
+      - name: Better registry credential
+        env:
+          BETTER_USER: ${{ vars.BETTER_ARTIFACTORY_USER }}
+          BETTER_TOKEN: ${{ secrets.BETTER_ARTIFACTORY_RSO }}
+        run: |
+          .github/scripts/better-npmrc.sh "$RUNNER_TEMP/npmrc"
+          echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/npmrc" >> "$GITHUB_ENV"
       - run: npm ci
         working-directory: app
       - run: npm test
@@ -64,12 +73,19 @@ jobs:
   image:
     needs: test
     runs-on: ubuntu-latest
+    environment: Better artifactory
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+
+      - name: Better registry credential
+        env:
+          BETTER_USER: ${{ vars.BETTER_ARTIFACTORY_USER }}
+          BETTER_TOKEN: ${{ secrets.BETTER_ARTIFACTORY_RSO }}
+        run: .github/scripts/better-npmrc.sh "$RUNNER_TEMP/npmrc"
 
       # Pull requests build but do NOT push: a PR from a fork does not get a
       # write-scoped GITHUB_TOKEN, and an unreviewed branch should not publish a
@@ -99,3 +115,4 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          secret-files: npmrc=${{ runner.temp }}/npmrc

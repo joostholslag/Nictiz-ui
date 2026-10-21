@@ -57,6 +57,11 @@ on:
         description: "Image tag to deploy — X.Y.Z or sha-<7+ hex> (no v prefix, never latest or a branch name). Empty = the image built from the commit of the ref you run this against."
         required: false
         type: string
+      bootstrap_better_poc:
+        description: "After deploying, upload the Better form-renderer PoC's OPT into EHRbase and create its demo EHR"
+        required: false
+        type: boolean
+        default: false
 
 # Two deploys racing on one Helm release would leave it in whichever state
 # finished last. Queue, never cancel: an interrupted `helm upgrade` is worse
@@ -171,6 +176,25 @@ jobs:
       # The chart is namespace-coupled to the health-stack release. Failing here
       # names the missing piece; failing inside `helm upgrade` shows up ten
       # minutes later as a hook timeout or CrashLoopBackOff.
+      # The cluster may be paused (instances powered off to save cost); a
+      # deploy brings it back. Volumes, IPs and the load balancer survive a
+      # pause. Needs an API key with instance rights on the project.
+      - name: Resume Scaleway instances
+        env:
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          SCW_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
+          CLUSTER_NAME: ${{ vars.TF_CLUSTER_NAME || 'freshehr' }}
+          SCW_ZONE: ${{ vars.TF_ZONE || 'nl-ams-1' }}
+        run: |
+          set -euo pipefail
+          .github/scripts/scaleway-resume.sh
+          for i in $(seq 1 30); do
+            kubectl --request-timeout=10s get namespace "$NAMESPACE" >/dev/null 2>&1 && exit 0
+            sleep 10
+          done
+          echo "::error::k3s API still unreachable 5 minutes after the instances came up"
+          exit 1
+
       - name: Preflight — can we reach the cluster, and is the health-stack there?
         run: |
           set -euo pipefail
@@ -239,3 +263,9 @@ jobs:
           done
           echo "::error::https://$NICTIZ_UI_HOST/ did not answer 302 → /oauth2/start (last: ${result:-no response})"
           exit 1
+
+  bootstrap-better-poc:
+    if: inputs.bootstrap_better_poc
+    needs: deploy
+    uses: ./.github/workflows/better-poc-bootstrap.yml
+    secrets: inherit

@@ -10,6 +10,8 @@ name: better-poc-bootstrap
 
 on:
   workflow_dispatch: {}
+  # Also runs as the optional last job of deploy-scaleway (bootstrap_better_poc).
+  workflow_call: {}
 
 concurrency:
   group: deploy-scaleway
@@ -44,6 +46,8 @@ jobs:
           set -euo pipefail
           kubectl --request-timeout=20s -n "$NAMESPACE" get service ehrbase keycloak
           kubectl -n "$NAMESPACE" get secret nictiz-ui-oidc
+          kubectl -n "$NAMESPACE" rollout status deploy/keycloak --timeout=300s
+          kubectl -n "$NAMESPACE" rollout status deploy/ehrbase --timeout=300s
 
       - name: Bootstrap
         run: |
