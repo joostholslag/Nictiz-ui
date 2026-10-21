@@ -47,12 +47,14 @@ jobs:
           curl -s -u "$BETTER_USER:$BETTER_TOKEN" 'https://hub.better.care/artifactory/api/search/artifact?name=*form-renderer*' | jq -r '.results[]?.uri' | head -40 || true
           echo "--- per npm repo: GET @better/form-renderer"
           for repo in $(curl -s -u "$BETTER_USER:$BETTER_TOKEN" https://hub.better.care/artifactory/api/repositories | jq -r '.[] | select(.packageType | ascii_downcase == "npm") | .key'); do
-            printf '%-30s metadata HTTP %s\n' "$repo" "$(curl -s -o /dev/null -w '%{http_code}' -u "$BETTER_USER:$BETTER_TOKEN" "https://hub.better.care/artifactory/api/npm/$repo/@better%2fform-renderer")"
-            echo "  storage listing of $repo/@better:"
-            curl -s -u "$BETTER_USER:$BETTER_TOKEN" "https://hub.better.care/artifactory/api/storage/$repo/@better" | jq -r '.children[]?.uri' | head -60 | sed 's/^/    /'
-            echo "  storage listing of $repo root:"
-            curl -s -u "$BETTER_USER:$BETTER_TOKEN" "https://hub.better.care/artifactory/api/storage/$repo" | jq -r '.children[]?.uri' | head -40 | sed 's/^/    /'
+            printf '%-30s metadata HTTP %s   storage/@better HTTP %s   storage root HTTP %s\n' "$repo" \
+              "$(curl -s -o /dev/null -w '%{http_code}' -u "$BETTER_USER:$BETTER_TOKEN" "https://hub.better.care/artifactory/api/npm/$repo/@better%2fform-renderer")" \
+              "$(curl -s -o /dev/null -w '%{http_code}' -u "$BETTER_USER:$BETTER_TOKEN" "https://hub.better.care/artifactory/api/storage/$repo/@better")" \
+              "$(curl -s -o /dev/null -w '%{http_code}' -u "$BETTER_USER:$BETTER_TOKEN" "https://hub.better.care/artifactory/api/storage/$repo")"
+            curl -s -u "$BETTER_USER:$BETTER_TOKEN" "https://hub.better.care/artifactory/api/storage/$repo/@better" | jq -r '.children[]?.uri' 2>/dev/null | head -40 | sed 's/^/    /' || true
           done
+          echo "--- permissions of this user (api/security/permissions may be admin-only)"
+          curl -s -o /dev/null -w 'HTTP %{http_code}\n' -u "$BETTER_USER:$BETTER_TOKEN" https://hub.better.care/artifactory/api/security/permissions
           echo "--- /npm/ alias: dist-tags of @better/form-renderer"
           curl -s -u "$BETTER_USER:$BETTER_TOKEN" 'https://hub.better.care/npm/@better%2fform-renderer' | head -c 600; echo
           .github/scripts/better-npmrc.sh "$RUNNER_TEMP/npmrc"
