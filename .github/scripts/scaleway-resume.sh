@@ -5,6 +5,9 @@
 # Env: SCW_SECRET_KEY, SCW_PROJECT_ID, CLUSTER_NAME, SCW_ZONE
 set -euo pipefail
 : "${SCW_SECRET_KEY:?}" "${SCW_PROJECT_ID:?}" "${CLUSTER_NAME:?}" "${SCW_ZONE:?}"
+# Secrets pasted into GitHub may carry a trailing newline, which breaks the URLs.
+SCW_SECRET_KEY=$(printf '%s' "$SCW_SECRET_KEY" | tr -d '[:space:]')
+SCW_PROJECT_ID=$(printf '%s' "$SCW_PROJECT_ID" | tr -d '[:space:]')
 API="https://api.scaleway.com/instance/v1/zones/$SCW_ZONE"
 
 servers() { # $1 = role tag

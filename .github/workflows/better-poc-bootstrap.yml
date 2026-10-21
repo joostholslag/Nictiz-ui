@@ -18,6 +18,7 @@ on:
       - ".github/workflows/better-poc-bootstrap.yml"
       - "app/src/better-renderer/bootstrap.sh"
       - "app/src/better-renderer/structured-smoke.sh"
+      - ".github/scripts/**"
   # Also runs as the optional last job of deploy-scaleway (bootstrap_better_poc).
   workflow_call: {}
 
