@@ -1,0 +1,73 @@
+{
+  "version": "0.0.1",
+  "created": "2026-10-21T06:08:59.565445196Z",
+  "resource": {
+    "id": 898365,
+    "templateId": "Vital Signs Lite",
+    "name": "test form vitals",
+    "version": "0.0.1",
+    "createdTimestamp": "2026-10-21T06:08:57.213528Z",
+    "status": "active",
+    "category": "default",
+    "creator": "admin",
+    "type": "form",
+    "schemaVersion": "3.0",
+    "tags": {
+      "_doc_type": "FORM",
+      "_form_status": "ACTIVE",
+      "_username": "Joost Holslag"
+    },
+    "files": [
+      {
+        "name": "app-pages",
+        "mimetype": "application/json",
+        "content": ""
+      },
+      {
+        "name": "form-description",
+        "mimetype": "application/json",
+        "content": ""
+      },
+      {
+        "name": "form-environment",
+        "mimetype": "application/json",
+        "content": ""
+      },
+      {
+        "name": "form-layout",
+        "mimetype": "application/json",
+        "content": ""
+      },
+      {
+        "name": "form-metadata",
+        "mimetype": "application/json",
+        "content": ""
+      },
+      {
+        "name": "plugin-configuration",
+        "mimetype": "application/json",
+        "content": ""
+      },
+      {
+        "name": "plugin-manifests",
+        "mimetype": "application/json",
+        "content": ""
+      },
+      {
+        "name": "summary-pages",
+        "mimetype": "application/json",
+        "content": ""
+      },
+      {
+        "name": "templates",
+        "mimetype": "text/plain",
+        "content": ""
+      },
+      {
+        "name": "widget-configuration",
+        "mimetype": "application/json",
+        "content": ""
+      }
+    ]
+  }
+}

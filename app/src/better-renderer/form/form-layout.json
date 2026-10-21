@@ -1,0 +1,44 @@
+[
+  {
+    "col": 1,
+    "row": 1,
+    "width": 12,
+    "height": 2,
+    "children": [
+      {
+        "id": "vital_signs_lite/vital_signs/blood_pressure",
+        "rows": [
+          {
+            "cols": [
+              {
+                "width": "100%",
+                "children": [
+                  {
+                    "id": "vital_signs_lite/vital_signs/blood_pressure/any_event",
+                    "rows": [
+                      {
+                        "cols": [
+                          {
+                            "width": "100%",
+                            "children": [
+                              {
+                                "id": "vital_signs_lite/vital_signs/blood_pressure/any_event/systolic"
+                              },
+                              {
+                                "id": "vital_signs_lite/vital_signs/blood_pressure/any_event/diastolic"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,65 @@
+# Bootstrap the Better form-renderer PoC on the Scaleway cluster: upload its OPT
+# into EHRbase and create one demo EHR (app/src/better-renderer/bootstrap.sh).
+# Manual only. Same access as deploy-scaleway (SCALEWAY_KUBECONFIG, k3s API
+# reachable from the runner); the health-stack and nictiz-ui releases must be up.
+#
+# EHRbase and Keycloak are reached through port-forwards, authenticating as the
+# BFF's own service account (the nictiz-ui-oidc Secret this chart generates), so
+# nothing from the stack repo's Terraform outputs is needed.
+name: better-poc-bootstrap
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-scaleway
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NAMESPACE: health-stack
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: scaleway
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write kubeconfig
+        env:
+          SCALEWAY_KUBECONFIG: ${{ secrets.SCALEWAY_KUBECONFIG }}
+        run: |
+          set -euo pipefail
+          [ -n "$SCALEWAY_KUBECONFIG" ] || { echo "::error::SCALEWAY_KUBECONFIG is not set on the 'scaleway' environment"; exit 1; }
+          umask 077
+          printf '%s' "$SCALEWAY_KUBECONFIG" > "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Preflight
+        run: |
+          set -euo pipefail
+          kubectl --request-timeout=20s -n "$NAMESPACE" get service ehrbase keycloak
+          kubectl -n "$NAMESPACE" get secret nictiz-ui-oidc
+
+      - name: Bootstrap
+        run: |
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" port-forward svc/ehrbase 8082:8080 >/dev/null 2>&1 &
+          kubectl -n "$NAMESPACE" port-forward svc/keycloak 8081:8080 >/dev/null 2>&1 &
+          for i in $(seq 1 30); do
+            curl -s -o /dev/null http://localhost:8081/auth/realms/freshehr && curl -s -o /dev/null http://localhost:8082/ehrbase/management/health && break
+            sleep 2
+          done
+          OIDC_CLIENT_ID=$(kubectl -n "$NAMESPACE" get secret nictiz-ui-oidc -o jsonpath='{.data.OIDC_CLIENT_ID}' | base64 -d)
+          OIDC_CLIENT_SECRET=$(kubectl -n "$NAMESPACE" get secret nictiz-ui-oidc -o jsonpath='{.data.OIDC_CLIENT_SECRET}' | base64 -d)
+          echo "::add-mask::$OIDC_CLIENT_SECRET"
+          export OIDC_CLIENT_ID OIDC_CLIENT_SECRET
+          bash app/src/better-renderer/bootstrap.sh | tee bootstrap.out
+          {
+            echo "### Better PoC bootstrap"
+            sed 's/^/- /' bootstrap.out
+          } >> "$GITHUB_STEP_SUMMARY"
