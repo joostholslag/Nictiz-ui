@@ -35,7 +35,7 @@ env:
 jobs:
   bootstrap:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     environment: scaleway
     steps:
       - uses: actions/checkout@v4
@@ -50,21 +50,22 @@ jobs:
           printf '%s' "$SCALEWAY_KUBECONFIG" > "$RUNNER_TEMP/kubeconfig"
           echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
 
+      # The cluster may be paused (instances powered off to save cost); this
+      # brings it back. Volumes, IPs and the load balancer survive a pause.
       - name: Resume Scaleway instances
         env:
           SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
-          SCW_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
           CLUSTER_NAME: ${{ vars.TF_CLUSTER_NAME || 'freshehr' }}
           SCW_ZONE: ${{ vars.TF_ZONE || 'nl-ams-1' }}
-        run: |
-          set -euo pipefail
-          .github/scripts/scaleway-resume.sh
-          for i in $(seq 1 30); do
-            kubectl --request-timeout=10s get namespace "$NAMESPACE" >/dev/null 2>&1 && exit 0
-            sleep 10
-          done
-          echo "::error::k3s API still unreachable 5 minutes after the instances came up"
-          exit 1
+        run: .github/scripts/scaleway-resume.sh
+
+      # The stack keeps 6443 closed to the internet; open it to this runner
+      # for the duration of the run (zone + project come from the step above).
+      - name: Open k3s API to this runner
+        env:
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          CLUSTER_NAME: ${{ vars.TF_CLUSTER_NAME || 'freshehr' }}
+        run: .github/scripts/scaleway-k3s-api.sh open
 
       - name: Preflight
         run: |
@@ -92,3 +93,10 @@ jobs:
             echo "### Better PoC bootstrap"
             sed 's/^/- /' bootstrap.out
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Close k3s API to this runner
+        if: always() && env.K3S_RUNNER_IP != ''
+        env:
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          CLUSTER_NAME: ${{ vars.TF_CLUSTER_NAME || 'freshehr' }}
+        run: .github/scripts/scaleway-k3s-api.sh close
