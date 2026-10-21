@@ -10,6 +10,14 @@ name: better-poc-bootstrap
 
 on:
   workflow_dispatch: {}
+  # workflow_dispatch needs the file on the default branch; until then it runs
+  # on pushes of the PoC's bootstrap files to the PoC branch.
+  push:
+    branches: [claude/better-form-renderer-poc]
+    paths:
+      - ".github/workflows/better-poc-bootstrap.yml"
+      - "app/src/better-renderer/bootstrap.sh"
+      - "app/src/better-renderer/structured-smoke.sh"
   # Also runs as the optional last job of deploy-scaleway (bootstrap_better_poc).
   workflow_call: {}
 
@@ -41,6 +49,22 @@ jobs:
           printf '%s' "$SCALEWAY_KUBECONFIG" > "$RUNNER_TEMP/kubeconfig"
           echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
 
+      - name: Resume Scaleway instances
+        env:
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          SCW_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
+          CLUSTER_NAME: ${{ vars.TF_CLUSTER_NAME || 'freshehr' }}
+          SCW_ZONE: ${{ vars.TF_ZONE || 'nl-ams-1' }}
+        run: |
+          set -euo pipefail
+          .github/scripts/scaleway-resume.sh
+          for i in $(seq 1 30); do
+            kubectl --request-timeout=10s get namespace "$NAMESPACE" >/dev/null 2>&1 && exit 0
+            sleep 10
+          done
+          echo "::error::k3s API still unreachable 5 minutes after the instances came up"
+          exit 1
+
       - name: Preflight
         run: |
           set -euo pipefail
@@ -61,7 +85,7 @@ jobs:
           OIDC_CLIENT_ID=$(kubectl -n "$NAMESPACE" get secret nictiz-ui-oidc -o jsonpath='{.data.OIDC_CLIENT_ID}' | base64 -d)
           OIDC_CLIENT_SECRET=$(kubectl -n "$NAMESPACE" get secret nictiz-ui-oidc -o jsonpath='{.data.OIDC_CLIENT_SECRET}' | base64 -d)
           echo "::add-mask::$OIDC_CLIENT_SECRET"
-          export OIDC_CLIENT_ID OIDC_CLIENT_SECRET
+          export OIDC_CLIENT_ID OIDC_CLIENT_SECRET STRUCTURED_SMOKE=1
           bash app/src/better-renderer/bootstrap.sh | tee bootstrap.out
           {
             echo "### Better PoC bootstrap"

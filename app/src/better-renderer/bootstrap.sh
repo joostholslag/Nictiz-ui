@@ -75,3 +75,8 @@ fi
 echo "subject: $SUBJECT_NAMESPACE/$SUBJECT_ID"
 echo "ehrId: $ehr_id"
 if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "ehr_id=$ehr_id" >> "$GITHUB_OUTPUT"; fi
+
+if [ "${STRUCTURED_SMOKE:-}" = 1 ]; then
+  echo; echo "STRUCTURED smoke test:"
+  EHRBASE_BASE=$base TOKEN=$TOKEN EHR_ID=$ehr_id bash "$HERE/structured-smoke.sh"
+fi
