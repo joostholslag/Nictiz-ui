@@ -1,0 +1,78 @@
+# Temporary PoC helper: list the @better/form-renderer versions on Better's
+# registry and install the latest one, so its types and README can be read
+# from the run without a registry token on a developer machine.
+name: better-registry-probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to install (empty = latest)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: Better artifactory
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Configure registry
+        env:
+          BETTER_TOKEN: ${{ secrets.BETTER_ARTIFACTORY_RSO }}
+        run: |
+          set -euo pipefail
+          [ -n "$BETTER_TOKEN" ] || { echo "::error::BETTER_ARTIFACTORY_RSO is empty"; exit 1; }
+          umask 077
+          {
+            echo "@better:registry=https://hub.better.care/npm/"
+            echo "//hub.better.care/:_authToken=$BETTER_TOKEN"
+            echo "//hub.better.care/npm/:_authToken=$BETTER_TOKEN"
+          } > ~/.npmrc
+          if npm view @better/form-renderer version >/dev/null 2>&1; then
+            echo "auth mode: _authToken"
+          else
+            echo "_authToken failed, trying _auth"
+            {
+              echo "@better:registry=https://hub.better.care/npm/"
+              echo "//hub.better.care/:_auth=$BETTER_TOKEN"
+              echo "//hub.better.care/npm/:_auth=$BETTER_TOKEN"
+              echo "always-auth=true"
+            } > ~/.npmrc
+            npm view @better/form-renderer version
+            echo "auth mode: _auth"
+          fi
+
+      - name: Versions
+        run: |
+          echo "## @better/form-renderer" >> "$GITHUB_STEP_SUMMARY"
+          echo "dist-tags:"; npm view @better/form-renderer dist-tags --json | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "versions:"; npm view @better/form-renderer versions --json | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Install
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir probe && cd probe
+          npm init -y >/dev/null
+          npm install --ignore-scripts "@better/form-renderer@${VERSION:-latest}"
+          echo "installed: $(node -p "require('@better/form-renderer/package.json').version")"
+          echo "--- files"; find node_modules/@better -maxdepth 3 -not -path '*/node_modules/*/node_modules/*' | sort | head -200
+          echo "--- package.json"; cat node_modules/@better/form-renderer/package.json
+          echo "--- README"; cat node_modules/@better/form-renderer/README* 2>/dev/null | head -400 || true
+          echo "--- d.ts"; find node_modules/@better/form-renderer -name '*.d.ts' | sort
+          echo "--- dependencies pulled"; ls node_modules | head -100
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: form-renderer-package
+          path: probe/node_modules/@better/form-renderer
+          retention-days: 3
