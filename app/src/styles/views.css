@@ -1480,3 +1480,84 @@ eps-patient-summary .summary-raw pre {
   font-size: 12px;
   line-height: 1.5;
 }
+
+/* ── Better form renderer PoC ──────────────────────────────────────────────── */
+
+better-renderer-poc .card {
+  margin-bottom: 1rem;
+}
+
+better-renderer-poc .ehr-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+better-renderer-poc .ehr-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1 1 24rem;
+  font-size: 0.85rem;
+}
+
+better-renderer-poc .ehr-row input {
+  font-family: ui-monospace, monospace;
+  padding: 0.5rem 0.6rem;
+}
+
+better-renderer-poc .form-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+better-renderer-poc .renderer-host:empty {
+  display: none;
+}
+
+better-renderer-poc pre.json {
+  max-height: 24rem;
+  overflow: auto;
+  font-size: 0.8rem;
+  background: var(--surface-2, #f6f7f9);
+  padding: 0.75rem;
+  border-radius: 6px;
+}
+
+better-renderer-poc .event-list {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+better-renderer-poc .event-list li {
+  margin: 0.25rem 0;
+}
+
+better-renderer-poc .event-list summary {
+  cursor: pointer;
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+better-renderer-poc .event-list .tag {
+  font-size: 0.75rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: #e3f3e8;
+  color: #1b6b3a;
+}
+
+better-renderer-poc .event-list li.failed .tag {
+  background: #fbe3e3;
+  color: #9b1c1c;
+}
+
+better-renderer-poc .event-list .err {
+  color: #9b1c1c;
+  font-size: 0.85rem;
+}

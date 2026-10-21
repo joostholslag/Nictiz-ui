@@ -32,12 +32,17 @@ RUN --mount=type=secret,id=npmrc,target=/root/.npmrc npm ci
 COPY app/tsconfig.json app/vite.config.ts ./
 COPY app/index.html ./
 COPY app/src ./src
+COPY app/scripts/better-renderer-assets.sh ./scripts/
 # public/ is copied verbatim into dist/ by vite build — the favicon lives here.
 COPY app/public ./public
 
 # `npm run build` is tsc && vite build — the typecheck is deliberately inside
 # the image build, so a type error fails the build rather than shipping.
 RUN npm run build
+
+# The Better form renderer is served as static files next to the SPA (loaded
+# on demand by src/better-renderer/view.ts), not bundled.
+RUN bash scripts/better-renderer-assets.sh dist/better-renderer
 
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM node:22-alpine AS runtime

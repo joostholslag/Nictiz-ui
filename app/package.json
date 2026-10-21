@@ -14,7 +14,8 @@
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
     "test:e2e": "playwright test",
-    "stack:verify": "bash scripts/stack-verify.sh"
+    "stack:verify": "bash scripts/stack-verify.sh",
+    "better-renderer:assets": "bash scripts/better-renderer-assets.sh"
   },
   "dependencies": {
     "medblocks-ui": "0.0.217",
