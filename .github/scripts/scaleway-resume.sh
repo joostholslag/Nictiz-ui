@@ -14,10 +14,23 @@ set -euo pipefail
 SCW_SECRET_KEY=$(printf '%s' "$SCW_SECRET_KEY" | tr -d '[:space:]')
 SCW_ORGANIZATION_ID=$(printf '%s' "${SCW_ORGANIZATION_ID:-}" | tr -d '[:space:]')
 SCW_PROJECT_ID=$(printf '%s' "${SCW_PROJECT_ID:-}" | tr -d '[:space:]')
-scope="organization=$SCW_ORGANIZATION_ID"
-[ -n "$SCW_ORGANIZATION_ID" ] || scope="project=$SCW_PROJECT_ID"
-
 api() { curl -sSf -H "X-Auth-Token: $SCW_SECRET_KEY" "$@"; }
+
+# The project is not known up front (the UI repo only holds the organization's
+# default project). SCW_SERVER_ID_HINT, the id of any instance of the cluster
+# (console URL), resolves it: the key must be allowed to read that instance.
+if [ -n "${SCW_SERVER_ID_HINT:-}" ]; then
+  hint=$(api "https://api.scaleway.com/instance/v1/zones/$SCW_ZONE/servers/$SCW_SERVER_ID_HINT" \
+    | jq -r '.server | "\(.project) \(.name) \(.state) \(.tags | join(","))"') \
+    || { echo "::error::cannot read instance $SCW_SERVER_ID_HINT in $SCW_ZONE with this key (no permission on its project?)"; exit 1; }
+  SCW_PROJECT_ID=${hint%% *}
+  echo "hint instance: ${hint#* } -> project resolved"
+  scope="project=$SCW_PROJECT_ID"
+elif [ -n "$SCW_ORGANIZATION_ID" ]; then
+  scope="organization=$SCW_ORGANIZATION_ID"
+else
+  scope="project=$SCW_PROJECT_ID"
+fi
 
 servers() { # $1 = zone, $2 = role tag -> "id state name project"
   api "https://api.scaleway.com/instance/v1/zones/$1/servers?$scope&tags=cluster:$CLUSTER_NAME,role:$2&per_page=100" \
