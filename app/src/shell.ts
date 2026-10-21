@@ -28,6 +28,7 @@ import './views/patients';
 import './views/compositions';
 import './views/composition-form';
 import './views/settings';
+import './better-renderer/view';
 import './views/patient-header';
 import './views/patient-summary';
 import './views/confirm-dialog';
@@ -38,8 +39,10 @@ import { currentUser, isAuthenticated, logout } from './auth/session';
 import type { PatientView } from './fhir/patient';
 
 export interface Route {
-  view: 'dashboard' | 'patients' | 'compositions' | 'form' | 'summary' | 'settings';
+  view: 'dashboard' | 'patients' | 'compositions' | 'form' | 'summary' | 'settings' | 'better';
   patientId?: string;
+  /** EHR id for the Better renderer PoC route. */
+  ehrId?: string;
   /** Composition uid, or 'new' for a blank form. */
   uid?: string;
   templateId?: string;
@@ -94,6 +97,8 @@ export function parseRoute(hash: string): Route {
   }
 
   if (segments[0] === 'settings') return { view: 'settings' };
+  // PoC: Better form renderer against EHRbase, `#/better-renderer?ehr=<ehrId>`.
+  if (segments[0] === 'better-renderer') return { view: 'better', ehrId: query.get('ehr') ?? undefined };
   return { view: 'dashboard' };
 }
 
@@ -257,6 +262,7 @@ export class EpsApp extends LitElement {
           ${this.navItem('#/dashboard', 'dashboard', '◧', 'Dashboard')}
           ${this.navItem('#/patients', 'patients', '👤', 'Patients')}
           ${this.navItem('#/settings', 'settings', '⚙', 'Settings')}
+          ${this.navItem('#/better-renderer', 'better', '▦', 'Better form (PoC)')}
         </nav>
 
         ${this.patient
@@ -375,6 +381,9 @@ export class EpsApp extends LitElement {
 
       case 'settings':
         return html`<eps-settings class="view" .health=${this.health}></eps-settings>`;
+
+      case 'better':
+        return html`<better-renderer-poc class="view" .ehrIdFromRoute=${this.route.ehrId ?? ''}></better-renderer-poc>`;
 
       default:
         return html`<eps-dashboard class="view" .health=${this.health}></eps-dashboard>`;

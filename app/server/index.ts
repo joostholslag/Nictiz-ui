@@ -1130,6 +1130,15 @@ app.get('/api/ehr/:ehrId/compositions', async (req, res) => {
 });
 
 /**
+ * Simplified-format selector for the composition routes. FLAT is what this
+ * app's own forms speak; STRUCTURED is what the Better form renderer emits
+ * (see src/better-renderer/). Anything else falls back to FLAT.
+ */
+function compositionFormat(req: express.Request): 'FLAT' | 'STRUCTURED' {
+  return String(req.query.format ?? '').toUpperCase() === 'STRUCTURED' ? 'STRUCTURED' : 'FLAT';
+}
+
+/**
  * Stores a composition. `templateId` is a per-request parameter, not a server
  * constant: the Compositions view is template-driven, so the same BFF has to
  * serve whichever template the form was built from.
@@ -1146,7 +1155,7 @@ app.post('/api/ehr/:ehrId/composition', (req, res) => {
   return forward(
     res,
     ehrbaseUrl(`ehr/${encodeURIComponent(req.params.ehrId)}/composition`, {
-      format: 'FLAT',
+      format: compositionFormat(req),
       templateId,
     }),
     {
@@ -1200,7 +1209,7 @@ app.put('/api/ehr/:ehrId/composition/:uid', (req, res) => {
   return forward(
     res,
     ehrbaseUrl(`ehr/${encodeURIComponent(req.params.ehrId)}/composition/${encodeURIComponent(objectId)}`, {
-      format: 'FLAT',
+      format: compositionFormat(req),
       templateId,
     }),
     {
@@ -1221,9 +1230,23 @@ app.get('/api/ehr/:ehrId/composition/:uid', (req, res) => {
     res,
     ehrbaseUrl(
       `ehr/${encodeURIComponent(req.params.ehrId)}/composition/${encodeURIComponent(req.params.uid)}`,
-      canonical ? {} : { format: 'FLAT' },
+      canonical ? {} : { format: compositionFormat(req) },
     ),
   );
+});
+
+/**
+ * Raw AQL for the Better form renderer PoC: in offline mode the renderer hands
+ * its own queries (prefill, form APIs) to the host app, which runs them here.
+ */
+app.post('/api/aql', async (req, res) => {
+  const q = String(req.body?.q ?? '');
+  if (!q) return res.status(400).json({ error: 'q is required' });
+  try {
+    res.json(await aql(q, req.body?.query_parameters ?? {}));
+  } catch (err) {
+    res.status(502).json({ error: 'AQL failed', detail: (err as Error).message });
+  }
 });
 
 // --- openFHIR mapping -------------------------------------------------------

@@ -1,0 +1,345 @@
+{
+  "min": 0,
+  "localizedNamesIncludeVariables": false,
+  "children": [
+    {
+      "min": 0,
+      "localizedNamesIncludeVariables": false,
+      "children": [
+        {
+          "min": 0,
+          "localizedNamesIncludeVariables": false,
+          "children": [
+            {
+              "min": 0,
+              "localizedNamesIncludeVariables": false,
+              "children": [],
+              "id": "systolic",
+              "name": "Systolic",
+              "localizedName": "Systolic",
+              "rmType": "DV_QUANTITY",
+              "nodeId": "at0004",
+              "max": 1,
+              "aqlPath": "/content[openEHR-EHR-SECTION.adhoc.v1,'Vital Signs']/items[openEHR-EHR-OBSERVATION.blood_pressure.v2]/data[at0001]/events[at0006]/data[at0003]/items[at0004]/value",
+              "formId": "vital_signs_lite/vital_signs/blood_pressure/any_event/systolic",
+              "templateInstance": "b2a64601-3331-4826-a368-6a40252632ce",
+              "alias": "Systolic",
+              "viewConfig": {
+                "tags": [],
+                "annotations": {},
+                "advanced": {},
+                "size": {},
+                "layout": {
+                  "label": {
+                    "align": "inherit"
+                  },
+                  "field": {
+                    "align": "inherit"
+                  }
+                },
+                "label": {}
+              },
+              "localizedNames": {
+                "en": "Systolic",
+                "de": "Systolisch",
+                "sv": "Systoliskt"
+              },
+              "localizedDescriptions": {
+                "en": "Peak systemic arterial blood pressure  - measured in systolic or contraction phase of the heart cycle.",
+                "de": "Der höchste arterielle Blutdruck eines Zyklus - gemessen in der systolischen oder Kontraktionsphase des Herzens.",
+                "sv": "Det högsta systemiskt arteriella blodtrycket uppmätt systoliskt eller under sammandragningsfasen av hjärtcykeln."
+              },
+              "inputs": [
+                {
+                  "list": [],
+                  "suffix": "magnitude",
+                  "type": "DECIMAL",
+                  "validation": {
+                    "precision": {
+                      "minOp": ">=",
+                      "min": 0,
+                      "maxOp": "<=",
+                      "max": 0
+                    },
+                    "range": {
+                      "min": 0,
+                      "minOp": ">=",
+                      "max": 1000,
+                      "maxOp": "<"
+                    }
+                  }
+                },
+                {
+                  "list": [
+                    {
+                      "value": "mm[Hg]",
+                      "label": "mm[Hg]",
+                      "localizedLabels": {
+                        "en": "mmHg",
+                        "de": "mmHg",
+                        "sv": "mmHg"
+                      },
+                      "validation": {
+                        "precision": {
+                          "minOp": ">=",
+                          "min": 0,
+                          "maxOp": "<=",
+                          "max": 0
+                        },
+                        "range": {
+                          "min": 0,
+                          "minOp": ">=",
+                          "max": 1000,
+                          "maxOp": "<"
+                        }
+                      }
+                    }
+                  ],
+                  "suffix": "unit",
+                  "type": "CODED_TEXT",
+                  "defaultValue": [
+                    "%p%mm[Hg]:::mm[Hg]%p%"
+                  ]
+                }
+              ]
+            },
+            {
+              "min": 0,
+              "localizedNamesIncludeVariables": false,
+              "children": [],
+              "id": "diastolic",
+              "name": "Diastolic",
+              "localizedName": "Diastolic",
+              "rmType": "DV_QUANTITY",
+              "nodeId": "at0005",
+              "max": 1,
+              "aqlPath": "/content[openEHR-EHR-SECTION.adhoc.v1,'Vital Signs']/items[openEHR-EHR-OBSERVATION.blood_pressure.v2]/data[at0001]/events[at0006]/data[at0003]/items[at0005]/value",
+              "formId": "vital_signs_lite/vital_signs/blood_pressure/any_event/diastolic",
+              "templateInstance": "b2a64601-3331-4826-a368-6a40252632ce",
+              "alias": "Diastolic",
+              "viewConfig": {
+                "tags": [],
+                "annotations": {},
+                "advanced": {},
+                "size": {},
+                "layout": {
+                  "label": {
+                    "align": "inherit"
+                  },
+                  "field": {
+                    "align": "inherit"
+                  }
+                },
+                "label": {}
+              },
+              "localizedNames": {
+                "en": "Diastolic",
+                "de": "Diastolisch",
+                "sv": "Diastoliskt"
+              },
+              "localizedDescriptions": {
+                "en": "Minimum systemic arterial blood pressure - measured in the diastolic or relaxation phase of the heart cycle.",
+                "de": "Der minimale systemische arterielle Blutdruck eines Zyklus - gemessen in der diastolischen oder Entspannungsphase des Herzens.",
+                "sv": "Det minsta systemiskt arteriella blodtrycket uppmätt diastoliskt eller i hjärtcykelns avslappningsfas."
+              },
+              "inputs": [
+                {
+                  "list": [],
+                  "suffix": "magnitude",
+                  "type": "DECIMAL",
+                  "validation": {
+                    "precision": {
+                      "minOp": ">=",
+                      "min": 0,
+                      "maxOp": "<=",
+                      "max": 0
+                    },
+                    "range": {
+                      "min": 0,
+                      "minOp": ">=",
+                      "max": 1000,
+                      "maxOp": "<"
+                    }
+                  }
+                },
+                {
+                  "list": [
+                    {
+                      "value": "mm[Hg]",
+                      "label": "mm[Hg]",
+                      "localizedLabels": {
+                        "en": "mmHg",
+                        "de": "mmHg",
+                        "sv": "mmHg"
+                      },
+                      "validation": {
+                        "precision": {
+                          "minOp": ">=",
+                          "min": 0,
+                          "maxOp": "<=",
+                          "max": 0
+                        },
+                        "range": {
+                          "min": 0,
+                          "minOp": ">=",
+                          "max": 1000,
+                          "maxOp": "<"
+                        }
+                      }
+                    }
+                  ],
+                  "suffix": "unit",
+                  "type": "CODED_TEXT",
+                  "defaultValue": [
+                    "%p%mm[Hg]:::mm[Hg]%p%"
+                  ]
+                }
+              ]
+            }
+          ],
+          "id": "any_event",
+          "name": "Any event",
+          "localizedName": "Any event",
+          "rmType": "EVENT",
+          "nodeId": "at0006",
+          "max": -1,
+          "aqlPath": "/content[openEHR-EHR-SECTION.adhoc.v1,'Vital Signs']/items[openEHR-EHR-OBSERVATION.blood_pressure.v2]/data[at0001]/events[at0006]",
+          "formId": "vital_signs_lite/vital_signs/blood_pressure/any_event",
+          "templateInstance": "b2a64601-3331-4826-a368-6a40252632ce",
+          "alias": "Any event",
+          "viewConfig": {
+            "tags": [],
+            "annotations": {},
+            "advanced": {},
+            "size": {},
+            "layout": {
+              "label": {
+                "align": "inherit"
+              },
+              "field": {
+                "align": "inherit"
+              }
+            },
+            "label": {},
+            "wrapBodyCellText": true,
+            "cellContentOverflow": "WRAP",
+            "cellContentAlignment": "MIDDLE",
+            "errorHandling": {}
+          },
+          "localizedNames": {
+            "en": "Any event",
+            "de": "Beliebiges Ereignis",
+            "sv": "Ospecificerad händelse"
+          },
+          "localizedDescriptions": {
+            "en": "Default, unspecified point in time or interval event which may be explicitly defined in a template or at run-time.",
+            "de": "Standardmäßiger, nicht näher beschriebener Zeitpunkt oder Intervall Ereignis welches in einem Template oder bei der Anwendung genauer definiert werden kann.",
+            "sv": "Standardval, händelse i ospecificerad tidpunkt eller tidsintervall som explicit kan definieras i en mall eller vid körning av program."
+          },
+          "inputs": [
+            {
+              "list": [],
+              "type": "CONTAINER"
+            }
+          ]
+        }
+      ],
+      "id": "blood_pressure",
+      "name": "Blood pressure",
+      "localizedName": "Blood pressure",
+      "rmType": "OBSERVATION",
+      "nodeId": "openEHR-EHR-OBSERVATION.blood_pressure.v2",
+      "max": 1,
+      "aqlPath": "/content[openEHR-EHR-SECTION.adhoc.v1,'Vital Signs']/items[openEHR-EHR-OBSERVATION.blood_pressure.v2]",
+      "formId": "vital_signs_lite/vital_signs/blood_pressure",
+      "templateInstance": "b2a64601-3331-4826-a368-6a40252632ce",
+      "alias": "Blood pressure",
+      "viewConfig": {
+        "tags": [],
+        "annotations": {},
+        "advanced": {
+          "hintText": {
+            "enabled": false,
+            "localizations": {}
+          }
+        },
+        "size": {},
+        "layout": {
+          "label": {
+            "align": "inherit"
+          },
+          "field": {
+            "align": "inherit"
+          }
+        },
+        "label": {},
+        "wrapBodyCellText": true,
+        "cellContentOverflow": "WRAP",
+        "cellContentAlignment": "MIDDLE",
+        "errorHandling": {},
+        "field": {}
+      },
+      "localizedNames": {
+        "en": "Blood pressure",
+        "de": "Blutdruck",
+        "sv": "Blodtryck"
+      },
+      "localizedDescriptions": {
+        "en": "The local measurement of arterial blood pressure which is a surrogate for arterial pressure in the systemic circulation.",
+        "de": "Die lokale Messung des arteriellen Blutdrucks als Surrogat für den arteriellen Druck in der systemischen Zirkulation.",
+        "sv": "Den lokala mätningen av artärblodtrycket som är ett surrogat för artärtryck i systemcirkulationen. Vanligtvis refererar användningen av termen blodtryck till mätningen av brakialartärtrycket i överarmen."
+      },
+      "inputs": [
+        {
+          "list": [],
+          "type": "CONTAINER"
+        }
+      ]
+    }
+  ],
+  "docType": "FORM",
+  "formId": "form_root",
+  "name": "form_root",
+  "rmType": "FORM_DEFINITION",
+  "uuid": "42e9cabb-533b-43cf-ae4c-4e2ae8a94ae1",
+  "fbVersion": "3.18.1",
+  "initialFbVersion": "3.18.1",
+  "defaultLanguage": "en",
+  "viewConfig": {
+    "tags": [],
+    "annotations": {},
+    "advanced": {
+      "hintText": {
+        "enabled": false,
+        "localizations": {}
+      }
+    },
+    "size": {
+      "label": "INHERIT",
+      "element": "COLUMN_8"
+    },
+    "layout": {
+      "label": {
+        "align": "top"
+      },
+      "field": {
+        "align": "inherit"
+      }
+    },
+    "label": {}
+  },
+  "templates": [
+    {
+      "templateId": "Vital Signs Lite",
+      "instance": "b2a64601-3331-4826-a368-6a40252632ce"
+    }
+  ],
+  "rootStyles": {
+    "theme": "DEFAULT"
+  },
+  "localizedNames": {
+    "en": "form_root",
+    "de": "form_root",
+    "sv": "form_root"
+  }
+}
