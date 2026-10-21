@@ -54,6 +54,11 @@ if [ -z "$zone" ]; then
         | jq -r '.servers[] | "  \(.name)\t\(.state)\tproject=\(.project)\ttags=\(.tags | join(","))"' || true
     done
   done | awk '!seen[$0]++'
+  if [ -n "${SCW_SERVER_ID_HINT:-}" ]; then
+    code=$(curl -s -o /dev/null -w '%{http_code}' -H "X-Auth-Token: $SCW_SECRET_KEY" \
+      "https://api.scaleway.com/instance/v1/zones/$SCW_ZONE/servers/$SCW_SERVER_ID_HINT")
+    echo "direct read of instance $SCW_SERVER_ID_HINT: HTTP $code (403 = this key has no Instances permission on the cluster's project; 404 = wrong zone)"
+  fi
   echo "projects visible to this key:"
   api "https://api.scaleway.com/account/v3/projects?organization_id=$SCW_ORGANIZATION_ID&page_size=50" \
     | jq -r '.projects[] | "  \(.name)\t\(.id)"' || echo "  (account API not permitted for this key)"
