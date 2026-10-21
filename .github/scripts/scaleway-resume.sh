@@ -16,10 +16,12 @@ SCW_ORGANIZATION_ID=$(printf '%s' "${SCW_ORGANIZATION_ID:-}" | tr -d '[:space:]'
 SCW_PROJECT_ID=$(printf '%s' "${SCW_PROJECT_ID:-}" | tr -d '[:space:]')
 api() { curl -sSf -H "X-Auth-Token: $SCW_SECRET_KEY" "$@"; }
 
-# The project is not known up front (the UI repo only holds the organization's
-# default project). SCW_SERVER_ID_HINT, the id of any instance of the cluster
-# (console URL), resolves it: the key must be allowed to read that instance.
-if [ -n "${SCW_SERVER_ID_HINT:-}" ]; then
+# SCW_PROJECT_ID is the cluster's project (environment variable). Without it,
+# SCW_SERVER_ID_HINT, the id of any instance of the cluster (console URL),
+# resolves it; last resort is the organization-wide listing.
+if [ -n "$SCW_PROJECT_ID" ]; then
+  scope="project=$SCW_PROJECT_ID"
+elif [ -n "${SCW_SERVER_ID_HINT:-}" ]; then
   hint=$(api "https://api.scaleway.com/instance/v1/zones/$SCW_ZONE/servers/$SCW_SERVER_ID_HINT" \
     | jq -r '.server | "\(.project) \(.name) \(.state) \(.tags | join(","))"') \
     || { echo "::error::cannot read instance $SCW_SERVER_ID_HINT in $SCW_ZONE with this key (no permission on its project?)"; exit 1; }
