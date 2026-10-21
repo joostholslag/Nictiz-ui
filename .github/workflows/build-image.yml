@@ -58,6 +58,7 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - name: Better registry credential
         env:
+          BETTER_NPM_AUTH: ${{ secrets.BETTER_NPM_RSO_ENCODED_TOKEN }}
           BETTER_USER: ${{ vars.BETTER_ARTIFACTORY_USER }}
           BETTER_TOKEN: ${{ secrets.BETTER_ARTIFACTORY_RSO }}
         run: |
@@ -83,6 +84,7 @@ jobs:
 
       - name: Better registry credential
         env:
+          BETTER_NPM_AUTH: ${{ secrets.BETTER_NPM_RSO_ENCODED_TOKEN }}
           BETTER_USER: ${{ vars.BETTER_ARTIFACTORY_USER }}
           BETTER_TOKEN: ${{ secrets.BETTER_ARTIFACTORY_RSO }}
         run: .github/scripts/better-npmrc.sh "$RUNNER_TEMP/npmrc"

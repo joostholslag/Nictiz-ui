@@ -31,51 +31,19 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: Configure registry
+      - name: Configure registry (the guide's two commands, with the encoded token)
         env:
-          BETTER_USER: ${{ vars.BETTER_ARTIFACTORY_USER }}
-          BETTER_TOKEN: ${{ secrets.BETTER_ARTIFACTORY_RSO }}
+          BETTER_NPM_AUTH: ${{ secrets.BETTER_NPM_RSO_ENCODED_TOKEN }}
         run: |
           set -euo pipefail
-          [ -n "$BETTER_USER" ] || { echo "::error::BETTER_ARTIFACTORY_USER variable missing on the 'Better artifactory' environment"; exit 1; }
-          [ -n "$BETTER_TOKEN" ] || { echo "::error::BETTER_ARTIFACTORY_RSO secret missing"; exit 1; }
-          echo "api/npm/auth with user+token: HTTP $(curl -s -o /dev/null -w '%{http_code}' -u "$BETTER_USER:$BETTER_TOKEN" https://hub.better.care/artifactory/api/npm/auth)"
-          echo "package metadata with user+token: HTTP $(curl -s -o /dev/null -w '%{http_code}' -u "$BETTER_USER:$BETTER_TOKEN" 'https://hub.better.care/npm/@better%2fform-renderer')"
-          echo "--- repositories visible to this account"
-          curl -s -u "$BETTER_USER:$BETTER_TOKEN" https://hub.better.care/artifactory/api/repositories | jq -r '.[] | "\(.type)\t\(.packageType)\t\(.key)\t\(.url)"' || true
-          echo "--- artifact search: form-renderer"
-          curl -s -u "$BETTER_USER:$BETTER_TOKEN" 'https://hub.better.care/artifactory/api/search/artifact?name=*form-renderer*' | jq -r '.results[]?.uri' | head -40 || true
-          echo "--- per npm repo: GET @better/form-renderer"
-          for repo in $(curl -s -u "$BETTER_USER:$BETTER_TOKEN" https://hub.better.care/artifactory/api/repositories | jq -r '.[] | select(.packageType | ascii_downcase == "npm") | .key'); do
-            printf '%-30s metadata HTTP %s   storage/@better HTTP %s   storage root HTTP %s\n' "$repo" \
-              "$(curl -s -o /dev/null -w '%{http_code}' -u "$BETTER_USER:$BETTER_TOKEN" "https://hub.better.care/artifactory/api/npm/$repo/@better%2fform-renderer")" \
-              "$(curl -s -o /dev/null -w '%{http_code}' -u "$BETTER_USER:$BETTER_TOKEN" "https://hub.better.care/artifactory/api/storage/$repo/@better")" \
-              "$(curl -s -o /dev/null -w '%{http_code}' -u "$BETTER_USER:$BETTER_TOKEN" "https://hub.better.care/artifactory/api/storage/$repo")"
-            curl -s -u "$BETTER_USER:$BETTER_TOKEN" "https://hub.better.care/artifactory/api/storage/$repo/@better" | jq -r '.children[]?.uri' 2>/dev/null | head -40 | sed 's/^/    /' || true
-          done
-          echo "--- permissions of this user (api/security/permissions may be admin-only)"
-          curl -s -o /dev/null -w 'HTTP %{http_code}\n' -u "$BETTER_USER:$BETTER_TOKEN" https://hub.better.care/artifactory/api/security/permissions
-          echo "--- /npm/ alias: dist-tags of @better/form-renderer"
-          curl -s -u "$BETTER_USER:$BETTER_TOKEN" 'https://hub.better.care/npm/@better%2fform-renderer' | head -c 600; echo
-          echo "--- guide, step by step"
-          umask 077
-          reply=$(curl -sSf -u "$BETTER_USER:$BETTER_TOKEN" https://hub.better.care/artifactory/api/npm/auth | tr -d '\r')
-          echo "api/npm/auth replied with keys: $(printf '%s\n' "$reply" | cut -d= -f1 | tr -d ' ' | paste -sd, -)"
-          auth=$(printf '%s\n' "$reply" | sed -n 's/^_auth *= *//p'); echo "::add-mask::$auth"
-          export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/npmrc-guide"; : > "$NPM_CONFIG_USERCONFIG"
-          npm config set '//hub.better.care/:_auth' "$auth"
-          npm config set '@better:registry' https://hub.better.care/npm/
-          echo "npmrc keys: $(cut -d= -f1 "$NPM_CONFIG_USERCONFIG" | paste -sd, -)"
-          if npm view @better/form-renderer version; then echo "guide config: works"; else echo "guide config: npm view failed (see above)"; fi
-          echo "--- guide + path-scoped _auth (what npm >=7 looks up for https://hub.better.care/npm/)"
-          npm config set '//hub.better.care/npm/:_auth' "$auth"
-          if npm view @better/form-renderer version; then echo "path-scoped config: works"; else echo "path-scoped config: npm view failed"; fi
-          echo "--- a public package through the same config (proves the registry split works)"
-          npm view lit version
-          echo "--- now the shared script used by build-image"
+          [ -n "$BETTER_NPM_AUTH" ] || { echo "::error::BETTER_NPM_RSO_ENCODED_TOKEN secret missing on the 'Better artifactory' environment"; exit 1; }
           .github/scripts/better-npmrc.sh "$RUNNER_TEMP/npmrc"
           echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/npmrc" >> "$GITHUB_ENV"
-          cp app/.npmrc ./.npmrc
+          export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/npmrc"
+          echo "npmrc keys: $(cut -d= -f1 "$NPM_CONFIG_USERCONFIG" | paste -sd, -)"
+          echo "public package through this config: lit $(npm view lit version)"
+          echo "encoded token as basic auth against the Hub, HTTP: $(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Basic $BETTER_NPM_AUTH" https://hub.better.care/artifactory/api/npm/auth)"
+          echo "package metadata with it, HTTP: $(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Basic $BETTER_NPM_AUTH" 'https://hub.better.care/npm/@better%2fform-renderer')"
           npm view @better/form-renderer version
 
       - name: Versions
