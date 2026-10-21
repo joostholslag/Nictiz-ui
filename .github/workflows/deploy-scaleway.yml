@@ -60,11 +60,6 @@ on:
         description: "Image tag to deploy — X.Y.Z or sha-<7+ hex> (no v prefix, never latest or a branch name). Empty = the image built from the commit of the ref you run this against."
         required: false
         type: string
-      bootstrap_better_poc:
-        description: "After deploying, upload the Better form-renderer PoC's OPT into EHRbase and create its demo EHR"
-        required: false
-        type: boolean
-        default: false
 
 # Two deploys racing on one Helm release would leave it in whichever state
 # finished last. Queue, never cancel: an interrupted `helm upgrade` is worse
@@ -274,9 +269,3 @@ jobs:
           SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
           CLUSTER_NAME: ${{ vars.TF_CLUSTER_NAME || 'freshehr' }}
         run: .github/scripts/scaleway-k3s-api.sh close
-
-  bootstrap-better-poc:
-    if: inputs.bootstrap_better_poc
-    needs: deploy
-    uses: ./.github/workflows/better-poc-bootstrap.yml
-    secrets: inherit

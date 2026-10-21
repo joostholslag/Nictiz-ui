@@ -2,9 +2,9 @@
 # Better form-renderer PoC bootstrap: upload the form's OPT into EHRbase and
 # create (or find) one demo EHR. Idempotent; prints the EHR id last.
 #
-# Defaults target the compose stack's dev-bypass ports. Against a cluster, run
-# it through .github/workflows/better-poc-bootstrap.yml, which port-forwards
-# the in-cluster Services and reads the BFF's own client secret.
+# Defaults target the compose stack's dev-bypass ports. On Scaleway the same
+# two steps are done through the deployed UI instead (Settings → upload the
+# OPT; Patients → new patient creates its EHR), see README.md.
 #
 # Env:
 #   EHRBASE_BASE        http://localhost:8082/ehrbase/rest/openehr/v1
@@ -76,7 +76,3 @@ echo "subject: $SUBJECT_NAMESPACE/$SUBJECT_ID"
 echo "ehrId: $ehr_id"
 if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "ehr_id=$ehr_id" >> "$GITHUB_OUTPUT"; fi
 
-if [ "${STRUCTURED_SMOKE:-}" = 1 ]; then
-  echo; echo "STRUCTURED smoke test:"
-  EHRBASE_BASE=$base TOKEN=$TOKEN EHR_ID=$ehr_id bash "$HERE/structured-smoke.sh"
-fi
