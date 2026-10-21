@@ -3,7 +3,12 @@
 # from the run without a registry token on a developer machine.
 name: better-registry-probe
 
+# workflow_dispatch only works once a workflow exists on the default branch,
+# so this also runs on pushes of itself to the PoC branch.
 on:
+  push:
+    branches: [claude/better-form-renderer-poc]
+    paths: [".github/workflows/better-registry-probe.yml"]
   workflow_dispatch:
     inputs:
       version:
