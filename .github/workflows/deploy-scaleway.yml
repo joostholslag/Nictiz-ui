@@ -184,6 +184,8 @@ jobs:
       - name: Resume Scaleway instances
         env:
           SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          SCW_ORGANIZATION_ID: ${{ secrets.SCW_DEFAULT_ORGANIZATION_ID }}
+          SCW_PROJECT_ID: ${{ secrets.SCW_DEFAULT_PROJECT_ID }}
           CLUSTER_NAME: ${{ vars.TF_CLUSTER_NAME || 'freshehr' }}
           SCW_ZONE: ${{ vars.TF_ZONE || 'nl-ams-1' }}
         run: .github/scripts/scaleway-resume.sh

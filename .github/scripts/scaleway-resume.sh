@@ -3,20 +3,24 @@
 # be paused to save cost) and wait until they run. Volumes, IPs and the load
 # balancer survive a pause, so nothing else changes.
 #
-# Finds the instances by their Terraform tags (cluster:<name>, role:...) in
-# SCW_ZONE first and the other nl-ams zones next, without a project filter, so
-# a project id that differs from the stack's does not hide them. Exports the
-# zone and project where they were found to $GITHUB_ENV for later steps.
-# Env: SCW_SECRET_KEY, CLUSTER_NAME, SCW_ZONE
+# Finds the instances by their Terraform tags (cluster:<name>, role:...)
+# across the whole organization (a key lists only its default project when no
+# scope is given) in SCW_ZONE first and the other nl-ams zones next. Exports
+# the zone and project where they were found to $GITHUB_ENV for later steps.
+# Env: SCW_SECRET_KEY, SCW_ORGANIZATION_ID, SCW_PROJECT_ID, CLUSTER_NAME, SCW_ZONE
 set -euo pipefail
 : "${SCW_SECRET_KEY:?}" "${CLUSTER_NAME:?}" "${SCW_ZONE:?}"
 # Secrets pasted into GitHub may carry a trailing newline, which breaks the URLs.
 SCW_SECRET_KEY=$(printf '%s' "$SCW_SECRET_KEY" | tr -d '[:space:]')
+SCW_ORGANIZATION_ID=$(printf '%s' "${SCW_ORGANIZATION_ID:-}" | tr -d '[:space:]')
+SCW_PROJECT_ID=$(printf '%s' "${SCW_PROJECT_ID:-}" | tr -d '[:space:]')
+scope="organization=$SCW_ORGANIZATION_ID"
+[ -n "$SCW_ORGANIZATION_ID" ] || scope="project=$SCW_PROJECT_ID"
 
 api() { curl -sSf -H "X-Auth-Token: $SCW_SECRET_KEY" "$@"; }
 
-servers() { # $1 = zone, $2 = role tag → "id state name project"
-  api "https://api.scaleway.com/instance/v1/zones/$1/servers?tags=cluster:$CLUSTER_NAME,role:$2&per_page=100" \
+servers() { # $1 = zone, $2 = role tag -> "id state name project"
+  api "https://api.scaleway.com/instance/v1/zones/$1/servers?$scope&tags=cluster:$CLUSTER_NAME,role:$2&per_page=100" \
     | jq -r '.servers[] | "\(.id) \(.state | gsub(" "; "_")) \(.name) \(.project)"'
 }
 
@@ -25,12 +29,19 @@ for z in "$SCW_ZONE" nl-ams-1 nl-ams-2 nl-ams-3; do
   if [ -n "$(servers "$z" control-plane)" ]; then zone=$z; break; fi
 done
 if [ -z "$zone" ]; then
-  echo "::error::no instances tagged cluster:$CLUSTER_NAME in $SCW_ZONE or any nl-ams zone"
+  echo "::error::no instances tagged cluster:$CLUSTER_NAME in $SCW_ZONE or any nl-ams zone ($scope)"
+  fp() { printf '%s' "$1" | sha256sum | cut -c1-12; }
+  echo "configured project id fingerprint: $(fp "$SCW_PROJECT_ID"), organization: $(fp "$SCW_ORGANIZATION_ID")"
   for z in "$SCW_ZONE" nl-ams-1 nl-ams-2 nl-ams-3; do
-    echo "servers visible to this key in $z:"
-    api "https://api.scaleway.com/instance/v1/zones/$z/servers?per_page=50" \
-      | jq -r '.servers[] | "  \(.name)\t\(.state)\tproject=\(.project)\ttags=\(.tags | join(","))"' || true
-  done | sort -u
+    for sc in "$scope" "project=$SCW_PROJECT_ID" ""; do
+      echo "servers in $z (${sc:-key default project}):"
+      api "https://api.scaleway.com/instance/v1/zones/$z/servers?per_page=50&$sc" \
+        | jq -r '.servers[] | "  \(.name)\t\(.state)\tproject=\(.project)\ttags=\(.tags | join(","))"' || true
+    done
+  done | awk '!seen[$0]++'
+  echo "projects visible to this key:"
+  api "https://api.scaleway.com/account/v3/projects?organization_id=$SCW_ORGANIZATION_ID&page_size=50" \
+    | jq -r '.projects[] | "  \(.name)\t\(.id)"' || echo "  (account API not permitted for this key)"
   exit 1
 fi
 project=$(servers "$zone" control-plane | awk '{print $4; exit}')

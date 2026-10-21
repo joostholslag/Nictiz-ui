@@ -57,6 +57,22 @@ jobs:
           curl -s -o /dev/null -w 'HTTP %{http_code}\n' -u "$BETTER_USER:$BETTER_TOKEN" https://hub.better.care/artifactory/api/security/permissions
           echo "--- /npm/ alias: dist-tags of @better/form-renderer"
           curl -s -u "$BETTER_USER:$BETTER_TOKEN" 'https://hub.better.care/npm/@better%2fform-renderer' | head -c 600; echo
+          echo "--- guide, step by step"
+          umask 077
+          reply=$(curl -sSf -u "$BETTER_USER:$BETTER_TOKEN" https://hub.better.care/artifactory/api/npm/auth | tr -d '\r')
+          echo "api/npm/auth replied with keys: $(printf '%s\n' "$reply" | cut -d= -f1 | tr -d ' ' | paste -sd, -)"
+          auth=$(printf '%s\n' "$reply" | sed -n 's/^_auth *= *//p'); echo "::add-mask::$auth"
+          export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/npmrc-guide"; : > "$NPM_CONFIG_USERCONFIG"
+          npm config set '//hub.better.care/:_auth' "$auth"
+          npm config set '@better:registry' https://hub.better.care/npm/
+          echo "npmrc keys: $(cut -d= -f1 "$NPM_CONFIG_USERCONFIG" | paste -sd, -)"
+          if npm view @better/form-renderer version; then echo "guide config: works"; else echo "guide config: npm view failed (see above)"; fi
+          echo "--- guide + path-scoped _auth (what npm >=7 looks up for https://hub.better.care/npm/)"
+          npm config set '//hub.better.care/npm/:_auth' "$auth"
+          if npm view @better/form-renderer version; then echo "path-scoped config: works"; else echo "path-scoped config: npm view failed"; fi
+          echo "--- a public package through the same config (proves the registry split works)"
+          npm view lit version
+          echo "--- now the shared script used by build-image"
           .github/scripts/better-npmrc.sh "$RUNNER_TEMP/npmrc"
           echo "NPM_CONFIG_USERCONFIG=$RUNNER_TEMP/npmrc" >> "$GITHUB_ENV"
           cp app/.npmrc ./.npmrc
